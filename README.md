@@ -107,13 +107,6 @@ PostgreSQL Database
 
 ---
 
-## 🖥️ Product Interface
-
-> Clean UI for managing teams, tasks, and allocations
-
-*(Add screenshots here — this is critical for judges)*
-
----
 
 ## 🔬 Why Allocra Matters
 

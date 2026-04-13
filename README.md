@@ -1,154 +1,210 @@
 # ⚡ Allocra — Intelligent Task Allocation Engine
 
-![Allocra Banner](assets/banner.png)
+<p align="center">
+  <img src="assets/banner.png" width="100%" />
+</p>
 
-### 🧠 From Guesswork → to Data-Driven Allocation
+<div align="center">
 
-> Allocra is a **constraint-aware decision engine** that assigns tasks based on skill, availability, and workload — not intuition.
+<br/>
 
----
 
-## 🎯 The Reality
+## The Uncomfortable Truth
 
-> Teams don’t struggle because of lack of talent.
-> They struggle because of **poor task allocation decisions**.
+> Most teams are not optimizing work. They are reacting to it.
 
----
+Most teams don't have a task management problem.
 
-## ❌ The Problem
+They have a **task assignment problem**.
 
-* Tasks assigned without understanding **who is best suited**
-* High performers get **overloaded repeatedly**
-* Availability is ignored → unrealistic planning
-* Decisions rely on **intuition, not logic**
+They solve it with:
+- hierarchy
+- habit
+- guesswork
 
-👉 Result: inefficiency, burnout, missed deadlines
-
----
-
-## 🚨 The Hidden Bottleneck
-
-> Allocation is invisible — but it controls everything.
+Allocra replaces that with **math — and the math shows its work.**
 
 ---
 
-## ✅ The Solution — Allocra Engine
+<div align="center">
 
-Allocra transforms task assignment into a **structured decision-making system**.
+<br/>
 
-### 🔁 Allocation Pipeline
+## A Situation You Already Recognize
 
-```text
-INPUT → FILTER → SCORE → RANK → ASSIGN → VALIDATE
+<br/>
+
+Your backlog has 47 tasks.
+Your best engineer has 6 hours left this sprint.
+
+Your PM assigns them 3 more.
+
+<br/>
+
+Allocra would have said:
+
+> **No. And here's exactly why.**
+
+<br/>
+
+</div>
+
+---
+
+> The question isn't "who should do this?"
+> 
+> It's "why this person over everyone else?"
+
+---
+
+> Most teams call it process.  
+> It's guesswork with confidence.
+
+> And guesswork is not a strategy.
+
+---
+
+<div align="center">
+
+**BUILT BY** &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ENGINEER WHO DESIGNS DECISION SYSTEMS  
+**NOT DRIVEN BY** &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; OPINION OR HIERARCHY  
+**POWERED BY** &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CONSTRAINTS, LOGIC, REALITY  
+**ALLOCATION METHOD** &nbsp; MATH, NOT VIBES
+
+</div>
+
+> This is not a tool.  
+> This is a decision system.
+
+---
+
+## Why This Exists
+
+> This is what most teams call "resource planning".
+
+<div align="center">
+
+| What They Call It | What It Actually Is |
+|:-----------------|:-------------------|
+| "Resource Planning" | One person guessing in a spreadsheet |
+| "Fair Distribution" | Whoever the PM remembers first |
+| "Skill-Based Assignment" | Giving everything to the senior dev |
+| "Capacity Check" | Asking "are you free?" in standup |
+| "Workload Balancing" | Realizing someone's overloaded... after the sprint fails |
+
+</div>
+
+<br/>
+
+This isn't a tools problem. Jira, Asana, Monday —
+**they track work. They don't decide who should do it.**
+
+Allocra does.
+
+> Every assignment is explainable. If it isn't, it doesn't exist.
+
+---
+
+## The Business Case
+
+<div align="center">
+
+| Before Allocra | After Allocra |
+|:--------------|:-------------|
+| Senior devs drowning, juniors idle | Workload balanced by actual capacity |
+| "Why did I get this?" conversations | Every assignment has a visible score + reasoning |
+| Sprint failures from silent overload | Overload detected and rejected *before* assignment |
+| Allocation takes a meeting | Allocation takes < 1 second |
+| Bias disguised as "judgment" | Decisions based on skill, load, and priority — auditable |
+
+</div>
+
+**The ROI isn't in the software. It's in the arguments you stop having.**
+
+> The system doesn't just allocate work.  
+> It removes the need to argue about it.
+
+---
+
+## The Engineering Case
+
+> Hungarian is optimal.  
+> Greedy is explainable.
+
+At this scale, explainability wins.
+
+If you can't justify an assignment, you don't have a system.
+
+---
+
+## Scoring
+
+<div align="center">
+
+| Factor | Weight | What It Answers |
+|:-------|:------:|:---------------|
+| `skill_match` | **x5** | Can this person actually do this? |
+| `free_time_score` | **x3** | Do they have bandwidth? |
+| `load_penalty` | **x-4** | Are we about to burn someone out? |
+| `priority_score` | **x2** | Does this task matter right now? |
+
+</div>
+
+```python
+score = (5 * skill_match) + (3 * free_time_score) - (4 * load_penalty) + (2 * priority_score)
 ```
 
-| Stage    | Purpose                          |
-| -------- | -------------------------------- |
-| FILTER   | Remove invalid candidates        |
-| SCORE    | Evaluate using weighted logic    |
-| RANK     | Sort candidates by suitability   |
-| ASSIGN   | Choose optimal match             |
-| VALIDATE | Ensure constraints are respected |
+These weights are deliberate.
 
 ---
 
-## 🧠 Core Intelligence
+## Edge Cases
 
-Each assignment is computed using:
+<div align="center">
 
-```text
-score = skill_match + availability_weight + priority_weight - overload_penalty
-```
+| Scenario | What Most Tools Do | What Allocra Does |
+|:---------|:-------------------|:-----------------|
+| No one is qualified | Assign anyway | Mark `unassigned`, surface it |
+| Equal scores | Random pick | Picks least loaded |
+| Someone's full | Add to the pile | Reject before damage is done |
+| Priorities shift | Manual reshuffling | Full recomputation |
 
-### Why this matters:
+</div>
 
-* ⚡ Fast → Real-time decision making
-* 🎯 Accurate → Skill-based matching
-* ⚖️ Balanced → Prevents overload
-* 🚫 Safe → Enforces constraints
-
----
-
-## 🧪 Example Allocation (Explainability Layer)
-
-```json
-{
-  "task": "Build API",
-  "assigned_to": "Jaswanth",
-  "reason": "High Python skill + sufficient availability + lowest workload"
-}
-```
-
-👉 Not just *what* — but **why**
+Failure is surfaced, not hidden.
 
 ---
 
-## 🏗️ System Architecture
+<div align="center">
 
-```text
-User Interface (React)
-        ↓
-API Layer (FastAPI)
-        ↓
-Allocation Engine (DSA Logic)
-        ↓
-PostgreSQL Database
-```
+## System Stack
 
----
+[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?style=for-the-badge&logo=postgresql&logoColor=white)](https://postgresql.org)
+[![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
 
-## ⚙️ Capabilities
+<br/>
 
-* Dynamic skill-based matching
-* Real-time allocation decisions
-* Constraint-aware filtering
-* Workload balancing system
-* Edge-case handling
+[![Algorithm](https://img.shields.io/badge/algorithm-Greedy_Optimization-FF6B35?style=for-the-badge&logo=databricks&logoColor=white)](#scoring)
+[![Complexity](https://img.shields.io/badge/complexity-O(n_×_m)-8E24AA?style=for-the-badge&logo=stackblitz&logoColor=white)](#scoring)
+[![Output](https://img.shields.io/badge/output-Deterministic-1565C0?style=for-the-badge&logo=checkmarx&logoColor=white)](#edge-cases)
+[![Latency](https://img.shields.io/badge/allocation_speed-<_1_sec-00C853?style=for-the-badge&logo=speedtest&logoColor=white)](#the-business-case)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
+
+</div>
 
 ---
 
+## Final Reality
 
-## 🔬 Why Allocra Matters
+If your team assigns tasks without being able to explain *why* —
 
-Most systems manage tasks.
-Allocra manages **decisions**.
+you don't have a system.
 
-From:
+You have guesswork with confidence.
 
-* ❌ manual assignment
-  →
-* ✅ intelligent allocation engine
+And guesswork does not scale.
 
----
-
-## 🧰 Tech Stack
-
-![React](https://img.shields.io/badge/Frontend-React-blue)
-![FastAPI](https://img.shields.io/badge/Backend-FastAPI-green)
-![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL-blue)
-![Algorithm](https://img.shields.io/badge/Core-Greedy%20Scoring-orange)
-
----
-
-## 🔮 Future Evolution
-
-* Hungarian Algorithm (optimal assignment)
-* ML-based adaptive scoring
-* Simulation mode (compare allocations)
-* Predictive workload balancing
-
----
-
-## 🧠 The Bottom Line
-
-> Allocra is not a task manager.
-
-It is a **decision engine for optimizing team performance**.
-
----
-
-## 👥 Built By
-
-Focused on **system thinking, algorithm design, and real-world usability**
-
----
+It compounds.

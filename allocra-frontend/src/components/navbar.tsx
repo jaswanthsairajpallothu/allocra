@@ -1,12 +1,15 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 
+
 const navItems = [
   { label: "Dashboard", path: "/" },
   { label: "Team", path: "/team" },
   { label: "Tasks", path: "/tasks" },
   { label: "Allocation", path: "/allocation" },
 ];
+
+
 
 export default function Navbar() {
   const [location] = useLocation();

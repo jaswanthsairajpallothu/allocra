@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { api, User, Task } from "@/lib/api";
 import { getPriorityLabel, getPriorityColor } from "@/lib/utils";
-import Spinner from "../components/Spinner.tsx";
+import Spinner from "@/components/Spinner";
 
 interface StatCardProps {
   label: string;

@@ -1,19 +1,30 @@
-from pydantic import BaseModel, Field
-from typing import List
+import uuid
+from datetime import datetime
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
-class SkillSchema(BaseModel):
-    skill_name: str
-    level: int = Field(ge=1, le=5)
+class UserSignup(BaseModel):
+    email: EmailStr
+    name: str = Field(min_length=2, max_length=100)
+    password: str = Field(min_length=8, max_length=128)
+    @field_validator("password")
+    @classmethod
+    def password_not_trivial(cls, v: str) -> str:
+        if v.lower() in ("password", "12345678", "password1"):
+            raise ValueError("Password is too weak")
+        return v
 
-class UserCreateSchema(BaseModel):
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserOut(BaseModel):
+    id: uuid.UUID
+    email: str
     name: str
-    available_hours: float = Field(gt=0)
-    skills: List[SkillSchema]
-
-class UserResponseSchema(BaseModel):
-    id: int
-    name: str
-    available_hours: float
-    skills: List[SkillSchema]
-
+    created_at: datetime
     model_config = {"from_attributes": True}
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut

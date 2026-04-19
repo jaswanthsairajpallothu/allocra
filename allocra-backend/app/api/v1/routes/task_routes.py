@@ -1,30 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from app.db.session import get_db
-from app.schemas.task_schema import TaskCreateSchema, TaskResponseSchema
+import uuid
+from fastapi import APIRouter
+from app.core.dependencies import CurrentUser, DBSession
+from app.schemas.task_schema import TaskCreate, TaskOut, TaskUpdate
 from app.services import task_service
-from typing import List
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
-@router.post("/", response_model=TaskResponseSchema)
-def create_task(data: TaskCreateSchema, db: Session = Depends(get_db)):
-    return task_service.create_task(db, data)
+@router.post("", response_model=TaskOut, status_code=201)
+def create_task(payload: TaskCreate, current_user: CurrentUser, db: DBSession):
+    return task_service.create_task(payload, current_user, db)
 
-@router.get("/", response_model=List[TaskResponseSchema])
-def get_tasks(db: Session = Depends(get_db)):
-    return task_service.get_all_tasks(db)
+@router.get("", response_model=list[TaskOut])
+def list_tasks(project_id: uuid.UUID, current_user: CurrentUser, db: DBSession):
+    return task_service.list_tasks(project_id, current_user, db)
 
-@router.get("/{task_id}", response_model=TaskResponseSchema)
-def get_task(task_id: int, db: Session = Depends(get_db)):
-    task = task_service.get_task_by_id(db, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return task
+@router.patch("/{task_id}", response_model=TaskOut)
+def update_task(task_id: uuid.UUID, payload: TaskUpdate, current_user: CurrentUser, db: DBSession):
+    return task_service.update_task(task_id, payload, current_user, db)
 
 @router.delete("/{task_id}")
-def delete_task(task_id: int, db: Session = Depends(get_db)):
-    deleted = task_service.delete_task(db, task_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return {"message": f"Task {task_id} deleted"}
+def delete_task(task_id: uuid.UUID, current_user: CurrentUser, db: DBSession):
+    return task_service.delete_task(task_id, current_user, db)

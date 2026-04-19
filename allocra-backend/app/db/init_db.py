@@ -1,8 +1,7 @@
-from app.db.base import Base
-from app.db.session import engine
-from app.models.db.user_model import UserDB
-from app.models.db.skill_model import SkillDB
-from app.models.db.task_model import TaskDB
-
-def init_db():
-    Base.metadata.create_all(bind=engine)
+from app.db.base import Base  # noqa
+from app.models.user import User  # noqa
+from app.models.workspace import Workspace, WorkspaceMember  # noqa
+from app.models.project import Project  # noqa
+from app.models.membership import Membership  # noqa
+from app.models.task import Task  # noqa
+from app.models.allocation import Allocation  # noqa

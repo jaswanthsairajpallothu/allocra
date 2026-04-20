@@ -1,251 +1,252 @@
-import { useState, useEffect, useRef } from "react";
-import { api, AllocationResult, Task, User } from "@/lib/api";
-import { showToast } from "@/components/Toast";
-import { getInitials, getAvatarColor } from "@/lib/utils";
-import Spinner from "@/components/Spinner";
+import { useState, useLayoutEffect } from 'react'
+import { Zap, ChevronDown, ChevronUp, AlertTriangle, Info, BarChart2 } from 'lucide-react'
+import { useWorkspaceStore } from '@/store/workspaceStore'
+import { allocationService } from '@/services/allocationService'
+import { AllocationRun, TaskAllocationResult } from '@/types'
+import { useLayout } from '@/components/layout/AppLayout'
+import ContextGuard from '@/components/layout/ContextGuard'
+import Button from '@/components/ui/Button'
+import Badge from '@/components/ui/Badge'
+import Avatar from '@/components/ui/Avatar'
+import { showToast } from '@/components/ui/Toast'
+import { getErrorMessage, cn } from '@/lib/utils'
 
-function ScoreBadge({ score }: { score: number }) {
-  const safeScore = score ?? 0;
-  const pct = Math.min(100, Math.round(safeScore * 10));
-  const color = pct >= 70 ? "bg-emerald-500" : pct >= 40 ? "bg-yellow-500" : "bg-red-500";
-  const textColor = pct >= 70 ? "text-emerald-400" : pct >= 40 ? "text-yellow-400" : "text-red-400";
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.width = "0%";
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        el.style.transition = "width 1s cubic-bezier(0.4, 0, 0.2, 1)";
-        el.style.width = `${pct}%`;
-      });
-    });
-  }, [pct]);
-
+function ScoreBar({ label, value, max }: { label: string; value: number; max: number }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex-1 h-2 rounded-full bg-accent overflow-hidden">
-        <div ref={ref} className={`h-full rounded-full ${color}`} style={{ width: 0 }} />
+      <span className="text-xs text-ink-3 w-20 flex-shrink-0">{label}</span>
+      <div className="flex-1 h-1.5 bg-stone rounded-full overflow-hidden">
+        <div className="h-full bg-violet rounded-full transition-all" style={{ width: `${(value/max)*100}%` }} />
       </div>
-      <span className={`text-sm font-bold min-w-[3rem] text-right ${textColor}`}>
-        {safeScore.toFixed(1)}
-      </span>
+      <span className="text-xs font-mono font-semibold text-ink w-7 text-right">{value.toFixed(0)}</span>
     </div>
-  );
+  )
 }
 
-function Avatar({ name }: { name: string }) {
+function AllocationRow({ result }: { result: TaskAllocationResult }) {
+  const [expanded, setExpanded] = useState(false)
+  const riskV = result.risk.risk_level === 'LOW' ? 'safe' : result.risk.risk_level === 'MEDIUM' ? 'warn' : 'danger'
+  const scoreColor = result.score >= 70 ? 'text-emerald' : result.score >= 40 ? 'text-amber' : 'text-rose'
+
   return (
-    <div className={`w-8 h-8 rounded-full ${getAvatarColor(name)} flex items-center justify-center text-xs font-bold text-white flex-shrink-0`}>
-      {getInitials(name)}
-    </div>
-  );
+    <>
+      <tr className="cursor-pointer" onClick={() => setExpanded(e => !e)}>
+        <td><p className="font-semibold text-ink">{result.task_title}</p></td>
+        <td>
+          <div className="flex items-center gap-2">
+            <Avatar name={result.assigned_to_name} photo={localStorage.getItem(`avatar_${result.assigned_to_name}`)} size="sm" />
+            <span className="text-[13px] text-ink">{result.assigned_to_name}</span>
+          </div>
+        </td>
+        <td>
+          <div className="flex items-center gap-1.5">
+            <div className={cn('w-9 h-9 rounded-lg bg-stone flex items-center justify-center font-bold font-mono text-sm', scoreColor)}>
+              {result.score.toFixed(0)}
+            </div>
+          </div>
+        </td>
+        <td><Badge variant={riskV} dot>{result.risk.risk_level}</Badge></td>
+        <td>
+          <div className="flex items-center gap-1.5">
+            <div className="w-12 h-1.5 bg-stone rounded-full overflow-hidden">
+              <div className={cn('h-full rounded-full', result.workload_after > 85 ? 'bg-rose' : result.workload_after > 60 ? 'bg-amber' : 'bg-emerald')}
+                style={{ width: `${Math.min(result.workload_after, 100)}%` }} />
+            </div>
+            <span className="text-xs font-mono text-ink-2">{result.workload_after.toFixed(0)}%</span>
+          </div>
+        </td>
+        <td>{expanded ? <ChevronUp size={14} className="text-ink-3" /> : <ChevronDown size={14} className="text-ink-3" />}</td>
+      </tr>
+      {expanded && (
+        <tr>
+          <td colSpan={6} className="bg-stone px-6 py-5 border-b border-border">
+            <div className="grid grid-cols-2 gap-8">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-3 mb-3">Score Breakdown</p>
+                <div className="space-y-2.5">
+                  <ScoreBar label="Skill match" value={result.score_breakdown.skill} max={40} />
+                  <ScoreBar label="Workload" value={result.score_breakdown.workload} max={25} />
+                  <ScoreBar label="Availability" value={result.score_breakdown.availability} max={20} />
+                  <ScoreBar label="Priority" value={result.score_breakdown.priority} max={15} />
+                </div>
+                <div className="mt-3 pt-3 border-t border-border flex justify-between">
+                  <span className="text-xs font-semibold text-ink-2">Total</span>
+                  <span className={cn('text-sm font-bold font-mono', scoreColor)}>{result.score.toFixed(1)} / 100</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-3 mb-3">Risk Analysis</p>
+                {result.risk.reasons.length === 0
+                  ? <p className="text-sm text-emerald flex items-center gap-1.5"><span>✓</span> No risk factors identified</p>
+                  : (
+                    <ul className="space-y-2">
+                      {result.risk.reasons.map((r, i) => (
+                        <li key={i} className="flex items-start gap-2 text-[13px] text-ink-2">
+                          <AlertTriangle size={12} className="text-amber mt-0.5 flex-shrink-0" />{r}
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                }
+                <div className="mt-4 pt-3 border-t border-border">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={riskV} dot>{result.risk.risk_level} RISK</Badge>
+                    <span className="text-xs font-mono text-ink-3">{result.risk.risk_score.toFixed(0)}/100</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  )
 }
 
 export default function Allocation() {
-  const [result, setResult] = useState<AllocationResult | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingData, setLoadingData] = useState(true);
+  const { selectedProject } = useWorkspaceStore()
+  const { setAction } = useLayout()
+  const [result, setResult] = useState<AllocationRun | null>(null)
+  const [running, setRunning] = useState(false)
 
-  useEffect(() => {
-    const fetch = async () => {
-      try {
-        const [t, u] = await Promise.all([api.getTasks(), api.getUsers()]);
-        setTasks(t);
-        setUsers(u);
-      } finally {
-        setLoadingData(false);
-      }
-    };
-    fetch();
-  }, []);
-
-  const runAllocation = async () => {
-    setLoading(true);
-    setResult(null);
+  const handleAllocate = async () => {
+    if (!selectedProject) return
+    setRunning(true)
     try {
-      const data = await api.runAllocation();
-      setResult(data);
-      const assignedCount = Object.keys(data.assigned).length;
-      const unassignedCount = data.unassigned.length;
-      showToast(`Allocated ${assignedCount} task${assignedCount !== 1 ? "s" : ""}. ${unassignedCount > 0 ? `${unassignedCount} unassigned.` : "All tasks assigned!"}`);
-    } catch (err) {
-      showToast((err as Error).message, "error");
-    } finally {
-      setLoading(false);
-    }
-  };
+      const run = await allocationService.allocate(selectedProject.id)
+      setResult(run)
+      showToast(`${run.assignments.length} task${run.assignments.length !== 1 ? 's' : ''} assigned`)
+    } catch (err) { showToast(getErrorMessage(err), 'error') }
+    finally { setRunning(false) }
+  }
 
-  const getTaskTitle = (taskId: string | number) =>
-    tasks.find((t) => t.id === Number(taskId))?.title ?? `Task #${taskId}`;
-
-  const getUserName = (userId: string | number) =>
-    users.find((u) => u.id === Number(userId))?.name ?? `User #${userId}`;
-
-  const assignedEntries = result
-    ? Object.entries(result.reasoning)
-    : [];
+  useLayoutEffect(() => {
+    setAction(
+      <Button size="sm" icon={<Zap size={13} />} loading={running} onClick={handleAllocate}>
+        {result ? 'Re-run Allocation' : 'Run Allocation'}
+      </Button>
+    )
+    return () => setAction(null)
+  }, [running, result, selectedProject])
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <div className="mb-8 opacity-0 fade-in-up">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Allocation</h1>
-        <p className="text-muted-foreground">Run the intelligent algorithm to optimally assign tasks to team members.</p>
-      </div>
-
-      {/* Run Button Card */}
-      <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-8 mb-8 opacity-0 fade-in-up stagger-1 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-primary/15 border border-primary/25 flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 3l14 9-14 9V3z" />
-          </svg>
+    <ContextGuard requireProject>
+      <div className="page">
+        <div className="mb-5">
+          <h2 className="text-lg font-bold text-ink">Allocation</h2>
+          <p className="text-sm text-ink-3 mt-0.5">See who should take each task — with reasoning</p>
         </div>
-        <h2 className="text-xl font-bold text-foreground mb-2">Run Allocation Algorithm</h2>
-        <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
-          The system will analyze {tasks.length} task{tasks.length !== 1 ? "s" : ""} and {users.length} team member{users.length !== 1 ? "s" : ""}, then score and assign each task based on skill match and availability.
-        </p>
-        <button
-          onClick={runAllocation}
-          disabled={loading || loadingData}
-          className="inline-flex items-center gap-3 px-8 py-3.5 rounded-xl bg-primary text-primary-foreground font-bold text-base hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/25"
-        >
-          {loading ? (
-            <><Spinner size="md" /><span>Running Allocation...</span></>
-          ) : (
-            <>
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              Run Allocation
-            </>
-          )}
-        </button>
-      </div>
 
-      {/* Results */}
-      {result && (
-        <div className="space-y-6">
-          {/* Summary badges */}
-          <div className="grid grid-cols-3 gap-4 opacity-0 fade-in-up">
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-center">
-              <div className="text-2xl font-bold text-emerald-400 mb-1">{Object.keys(result.assigned).length}</div>
-              <div className="text-xs text-muted-foreground font-medium">Assigned</div>
+        {!result && !running && (
+          <div className="card p-16 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-violet-muted flex items-center justify-center mx-auto mb-4">
+              <Zap size={24} className="text-violet" />
             </div>
-            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-center">
-              <div className="text-2xl font-bold text-red-400 mb-1">{result.unassigned.length}</div>
-              <div className="text-xs text-muted-foreground font-medium">Unassigned</div>
-            </div>
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-center">
-              <div className="text-2xl font-bold text-primary mb-1">
-                {assignedEntries.length > 0
-                  ? (assignedEntries.reduce((sum, [, r]) => sum + r.score, 0) / assignedEntries.length).toFixed(1)
-                  : "—"}
-              </div>
-              <div className="text-xs text-muted-foreground font-medium">Avg Score</div>
-            </div>
+            <h3 className="text-sm font-bold text-ink mb-2">No allocation run yet</h3>
+            <p className="text-sm text-ink-3 max-w-sm mx-auto mb-6">
+              Run allocation to see scored assignments, risk levels, and workload impact for every task.
+            </p>
+            <Button icon={<Zap size={14} />} onClick={handleAllocate}>Run Allocation</Button>
           </div>
+        )}
 
-          {/* Assigned results */}
-          {assignedEntries.length > 0 && (
-            <div className="rounded-2xl border border-border bg-card overflow-hidden opacity-0 fade-in-up stagger-1">
-              <div className="px-6 py-4 border-b border-border flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                <h2 className="text-lg font-semibold text-foreground">Assigned Tasks</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Task</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assigned To</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-40">Score</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Skill Lv.</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Load After</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {assignedEntries.map(([taskId, reasoning], i) => (
-                      <tr
-                        key={taskId}
-                        className="hover:bg-accent/20 transition-colors opacity-0 fade-in-up"
-                        style={{ animationDelay: `${0.05 * i}s` }}
-                      >
-                        <td className="px-6 py-4">
-                          <span className="text-sm font-medium text-foreground">{getTaskTitle(taskId)}</span>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-2.5">
-                            <Avatar name={reasoning.assigned_to ?? ""} />
-                            <span className="text-sm text-foreground font-medium">{reasoning.assigned_to ?? "Unknown"}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 min-w-[160px]">
-                          <ScoreBadge score={reasoning.score} />
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-1">
-                            {[1,2,3,4,5,6,7,8,9,10].slice(0, reasoning.skill_level).map((_, j) => (
-                              <div key={j} className="w-1.5 h-1.5 rounded-full bg-primary" />
-                            ))}
-                            {[1,2,3,4,5,6,7,8,9,10].slice(reasoning.skill_level).map((_, j) => (
-                              <div key={j} className="w-1.5 h-1.5 rounded-full bg-muted" />
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className={`text-sm font-medium ${
-                            reasoning.load_after_assignment > 40 ? "text-red-400" :
-                            reasoning.load_after_assignment > 20 ? "text-yellow-400" :
-                            "text-emerald-400"
-                          }`}>
-                            {reasoning.load_after_assignment}h
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        {running && (
+          <div className="card p-16 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-violet-muted flex items-center justify-center mx-auto mb-4 animate-pulse-soft">
+              <BarChart2 size={24} className="text-violet" />
             </div>
-          )}
+            <p className="text-sm font-semibold text-ink mb-1">Analysing team capacity…</p>
+            <p className="text-sm text-ink-3">Scoring every candidate for every task</p>
+          </div>
+        )}
 
-          {/* Unassigned */}
-          {result.unassigned.length > 0 && (
-            <div className="rounded-2xl border border-red-500/30 bg-red-500/5 overflow-hidden opacity-0 fade-in-up stagger-2">
-              <div className="px-6 py-4 border-b border-red-500/20 flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-red-400" />
-                <h2 className="text-lg font-semibold text-foreground">Unassigned Tasks</h2>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 font-semibold ml-auto">
-                  {result.unassigned.length} unmatched
-                </span>
+        {result && !running && (
+          <div className="space-y-4 animate-fade">
+            {/* Summary stats */}
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { label: 'Assigned', v: result.assignments.length, color: 'text-emerald', bg: 'bg-emerald-bg' },
+                { label: 'Unassigned', v: result.unassigned_tasks.length, color: result.unassigned_tasks.length > 0 ? 'text-rose' : 'text-ink-3', bg: 'bg-rose-bg' },
+                { label: 'Suggestions', v: result.optimization_suggestions.length, color: 'text-amber', bg: 'bg-amber-bg' },
+                { label: 'Insights', v: result.system_insights.length, color: 'text-violet', bg: 'bg-violet-muted' },
+              ].map(({ label, v, color, bg }) => (
+                <div key={label} className="stat text-center">
+                  <p className={cn('text-3xl font-bold font-mono', color)}>{v}</p>
+                  <p className="text-xs text-ink-3 mt-1">{label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Assignments table */}
+            <div className="card overflow-hidden">
+              <div className="px-5 py-4 border-b border-border">
+                <h3 className="text-sm font-bold text-ink">Assignments</h3>
+                <p className="text-xs text-ink-3 mt-0.5">Click any row to see score breakdown and risk analysis</p>
               </div>
-              <div className="p-6">
-                <p className="text-xs text-muted-foreground mb-4">
-                  These tasks could not be assigned — no team member has the required skill or sufficient availability.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {result.unassigned.map((taskId) => (
-                    <div key={taskId} className="flex items-center gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-                      <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
-                        <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
+              {result.assignments.length === 0
+                ? <div className="p-12 text-center"><p className="text-sm text-ink-3">No tasks were assigned. Check team capacity and skill coverage.</p></div>
+                : (
+                  <table className="tbl">
+                    <thead><tr><th>Task</th><th>Assigned To</th><th>Score</th><th>Risk</th><th>Load After</th><th className="w-8"></th></tr></thead>
+                    <tbody>{result.assignments.map(a => <AllocationRow key={a.task_id} result={a} />)}</tbody>
+                  </table>
+                )
+              }
+            </div>
+
+            {/* Suggestions */}
+            {result.optimization_suggestions.length > 0 && (
+              <div className="card p-5">
+                <h3 className="text-sm font-bold text-ink mb-3">Optimization Suggestions</h3>
+                <div className="space-y-2">
+                  {result.optimization_suggestions.map((s, i) => (
+                    <div key={i} className="flex items-start gap-3 p-3.5 rounded-lg bg-amber-bg border border-amber-border">
+                      <AlertTriangle size={14} className="text-amber mt-0.5 flex-shrink-0" />
                       <div>
-                        <div className="text-sm font-medium text-foreground">{getTaskTitle(taskId)}</div>
-                        <div className="text-xs text-red-400">No suitable assignee found</div>
+                        <p className="text-sm font-semibold text-ink">{s.suggestion}</p>
+                        <p className="text-xs text-ink-3 mt-0.5">{s.reason}</p>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
+            )}
+
+            {/* Insights */}
+            {result.system_insights.length > 0 && (
+              <div className="card p-5">
+                <h3 className="text-sm font-bold text-ink mb-3">System Insights</h3>
+                <div className="space-y-2">
+                  {result.system_insights.map((ins, i) => (
+                    <div key={i} className={cn('flex items-start gap-3 p-3.5 rounded-lg border',
+                      ins.type === 'SKILL_GAP' ? 'bg-rose-bg border-rose/20' :
+                      ins.type === 'DEPENDENCY_RISK' ? 'bg-amber-bg border-amber-border' : 'bg-stone border-border'
+                    )}>
+                      <Info size={14} className={cn('mt-0.5 flex-shrink-0', ins.type === 'SKILL_GAP' ? 'text-rose' : ins.type === 'DEPENDENCY_RISK' ? 'text-amber' : 'text-ink-3')} />
+                      <p className="text-[13px] text-ink">{ins.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Unassigned */}
+            {result.unassigned_tasks.length > 0 && (
+              <div className="card p-5">
+                <h3 className="text-sm font-bold text-ink mb-3">Unassigned Tasks</h3>
+                <div className="space-y-2">
+                  {result.unassigned_tasks.map((t, i) => (
+                    <div key={i} className="flex items-center justify-between p-3.5 rounded-lg bg-rose-bg border border-rose/20">
+                      <span className="text-sm font-semibold text-ink">{t.title}</span>
+                      <span className="text-xs text-ink-3">{t.reason}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </ContextGuard>
+  )
 }

@@ -1,263 +1,217 @@
-import { useState, useEffect } from "react";
-import { api, Task } from "@/lib/api";
-import { showToast } from "@/components/Toast";
-import Spinner from "@/components/Spinner";
-import { getPriorityColor, getPriorityLabel, getDifficultyColor } from "@/lib/utils";
+import { useEffect, useState, useLayoutEffect } from 'react'
+import { Plus, Trash2, Pencil, Clock, CheckSquare } from 'lucide-react'
+import { useWorkspaceStore } from '@/store/workspaceStore'
+import { taskService } from '@/services/taskService'
+import { Task } from '@/types'
+import { useLayout } from '@/components/layout/AppLayout'
+import ContextGuard from '@/components/layout/ContextGuard'
+import Button from '@/components/ui/Button'
+import Badge from '@/components/ui/Badge'
+import Modal from '@/components/ui/Modal'
+import { showToast } from '@/components/ui/Toast'
+import { getErrorMessage, KNOWN_SKILLS, cn } from '@/lib/utils'
 
-const SKILL_SUGGESTIONS = [
-  "Python", "JavaScript", "TypeScript", "React", "Node.js",
-  "SQL", "Machine Learning", "Data Analysis", "DevOps", "Design",
-  "Java", "Go", "Rust", "AWS", "Docker",
-];
+const PRIORITY_COLORS = { HIGH: 'bg-rose', MEDIUM: 'bg-amber', LOW: 'bg-emerald' }
+const PRIORITY_BADGE: Record<string, 'high'|'medium'|'low'> = { HIGH: 'high', MEDIUM: 'medium', LOW: 'low' }
+const STATUS_BADGE: Record<string, 'default'|'violet'|'safe'> = { PENDING: 'default', ASSIGNED: 'violet', COMPLETED: 'safe' }
 
-function StarRating({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const [hovered, setHovered] = useState(0);
+function TaskForm({ initial, projectId, onSubmit, loading }: {
+  initial?: Partial<Task>; projectId: string
+  onSubmit: (d: any) => void; loading: boolean
+}) {
+  const [title, setTitle] = useState(initial?.title || '')
+  const [skill, setSkill] = useState(initial?.required_skill || '')
+  const [level, setLevel] = useState(initial?.required_level || 3)
+  const [hours, setHours] = useState(initial?.estimated_hours || 8)
+  const [priority, setPriority] = useState(initial?.priority || 'MEDIUM')
+  const [desc, setDesc] = useState(initial?.description || '')
+
   return (
-    <div className="flex gap-1">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <button
-          key={star}
-          type="button"
-          onClick={() => onChange(star)}
-          onMouseEnter={() => setHovered(star)}
-          onMouseLeave={() => setHovered(0)}
-          className="transition-transform hover:scale-110 active:scale-95"
-        >
-          <svg
-            className={`w-7 h-7 transition-colors ${
-              star <= (hovered || value)
-                ? star >= 4 ? "text-red-400" : star >= 3 ? "text-orange-400" : star >= 2 ? "text-yellow-400" : "text-emerald-400"
-                : "text-muted-foreground/30"
-            }`}
-            fill="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-          </svg>
-        </button>
-      ))}
+    <div className="space-y-4">
+      <div>
+        <label className="block text-[12px] font-bold uppercase tracking-wide text-ink-2 mb-1.5">Task title *</label>
+        <input className="field" placeholder="e.g. Build authentication flow" value={title} onChange={e => setTitle(e.target.value)} autoFocus />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[12px] font-bold uppercase tracking-wide text-ink-2 mb-1.5">Required skill *</label>
+          <input className="field" placeholder="e.g. React" list="skills-dl" value={skill} onChange={e => setSkill(e.target.value)} />
+          <datalist id="skills-dl">{KNOWN_SKILLS.map(s => <option key={s} value={s} />)}</datalist>
+        </div>
+        <div>
+          <label className="block text-[12px] font-bold uppercase tracking-wide text-ink-2 mb-1.5">Skill level (1–5)</label>
+          <input type="number" min={1} max={5} className="field" value={level} onChange={e => setLevel(Number(e.target.value))} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[12px] font-bold uppercase tracking-wide text-ink-2 mb-1.5">Estimated hours</label>
+          <input type="number" min={1} className="field" value={hours} onChange={e => setHours(Number(e.target.value))} />
+        </div>
+        <div>
+          <label className="block text-[12px] font-bold uppercase tracking-wide text-ink-2 mb-1.5">Priority</label>
+          <select className="field" value={priority} onChange={e => setPriority(e.target.value)}>
+            {['HIGH','MEDIUM','LOW'].map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className="block text-[12px] font-bold uppercase tracking-wide text-ink-2 mb-1.5">Description (optional)</label>
+        <textarea className="field resize-none h-16" placeholder="Additional context…" value={desc} onChange={e => setDesc(e.target.value)} />
+      </div>
+      <Button className="w-full" size="md" loading={loading}
+        onClick={() => onSubmit({ title, required_skill: skill, required_level: level, estimated_hours: hours, priority, description: desc, project_id: projectId })}>
+        {initial ? 'Save changes' : 'Create task'}
+      </Button>
     </div>
-  );
+  )
 }
 
 export default function Tasks() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const { selectedProject } = useWorkspaceStore()
+  const { setAction } = useLayout()
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editTask, setEditTask] = useState<Task | null>(null)
+  const [filter, setFilter] = useState('ALL')
 
-  const [title, setTitle] = useState("");
-  const [requiredSkill, setRequiredSkill] = useState("");
-  const [difficulty, setDifficulty] = useState(5);
-  const [priority, setPriority] = useState(2);
+  useLayoutEffect(() => {
+    setAction(
+      <Button size="sm" icon={<Plus size={13} />} onClick={() => setCreateOpen(true)}>
+        Add Task
+      </Button>
+    )
+    return () => setAction(null)
+  }, [])
 
-  const fetchTasks = async () => {
+  useEffect(() => {
+    if (!selectedProject) return
+    setLoading(true)
+    taskService.list(selectedProject.id).then(setTasks).catch(() => {}).finally(() => setLoading(false))
+  }, [selectedProject?.id])
+
+  const handleCreate = async (data: any) => {
+    setSubmitting(true)
     try {
-      const data = await api.getTasks();
-      setTasks(data);
-    } finally {
-      setLoading(false);
-    }
-  };
+      const t = await taskService.create(data)
+      setTasks(prev => [t, ...prev]); setCreateOpen(false); showToast('Task created')
+    } catch (err) { showToast(getErrorMessage(err), 'error') }
+    finally { setSubmitting(false) }
+  }
 
-  useEffect(() => { fetchTasks(); }, []);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return showToast("Title is required", "error");
-    if (!requiredSkill.trim()) return showToast("Required skill is needed", "error");
-
-    setSubmitting(true);
+  const handleEdit = async (data: any) => {
+    if (!editTask) return
+    setSubmitting(true)
     try {
-      await api.createTask({ title: title.trim(), required_skill: requiredSkill.trim(), difficulty, priority });
-      showToast(`Task "${title}" created!`);
-      setTitle("");
-      setRequiredSkill("");
-      setDifficulty(5);
-      setPriority(2);
-      await fetchTasks();
-    } catch (err) {
-      showToast((err as Error).message, "error");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+      const t = await taskService.update(editTask.id, data)
+      setTasks(prev => prev.map(x => x.id === t.id ? t : x)); setEditTask(null); showToast('Task updated')
+    } catch (err) { showToast(getErrorMessage(err), 'error') }
+    finally { setSubmitting(false) }
+  }
 
-  const handleDeleteTask = async (taskId: number, taskTitle: string) => {
+  const handleDelete = async (task: Task) => {
+    if (!confirm(`Delete "${task.title}"?`)) return
     try {
-      await fetch(`https://allocra.onrender.com/api/v1/tasks/${taskId}`, { method: "DELETE" });
-      await fetchTasks();
-      showToast(`"${taskTitle}" deleted`);
-    } catch {
-      showToast("Failed to delete task", "error");
-    }
-  };
+      await taskService.delete(task.id)
+      setTasks(prev => prev.filter(t => t.id !== task.id)); showToast('Task deleted')
+    } catch (err) { showToast(getErrorMessage(err), 'error') }
+  }
 
-  const difficultyLabel = difficulty >= 8 ? "Expert" : difficulty >= 5 ? "Intermediate" : "Beginner";
+  const filtered = filter === 'ALL' ? tasks : tasks.filter(t => t.status === filter)
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <div className="mb-8 opacity-0 fade-in-up">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Tasks</h1>
-        <p className="text-muted-foreground">Define tasks with their required skills and assign priorities.</p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        <div className="lg:col-span-2 opacity-0 fade-in-up stagger-1">
-          <form onSubmit={handleSubmit} className="rounded-2xl border border-border bg-card p-6 space-y-5">
-            <h2 className="text-lg font-semibold text-foreground">Create Task</h2>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">Task Title</label>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Build authentication system"
-                className="w-full px-3 py-2.5 rounded-xl bg-accent/50 border border-input text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">Required Skill</label>
-              <input
-                value={requiredSkill}
-                onChange={(e) => setRequiredSkill(e.target.value)}
-                placeholder="e.g. Python"
-                list="task-skills"
-                className="w-full px-3 py-2.5 rounded-xl bg-accent/50 border border-input text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
-              />
-              <datalist id="task-skills">
-                {SKILL_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
-              </datalist>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
-                Difficulty
-                <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-semibold ${getDifficultyColor(difficulty)}`}>
-                  {difficulty}/10 — {difficultyLabel}
-                </span>
-              </label>
-              <input
-                type="range"
-                min={1}
-                max={10}
-                value={difficulty}
-                onChange={(e) => setDifficulty(Number(e.target.value))}
-                className="w-full accent-primary"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>Easy</span>
-                <span>Expert</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
-                Priority
-                <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-semibold ${getPriorityColor(priority)}`}>
-                  {getPriorityLabel(priority)}
-                </span>
-              </label>
-              <StarRating value={priority} onChange={setPriority} />
-              <p className="text-xs text-muted-foreground mt-1">1 star = Low, 5 stars = Critical</p>
-            </div>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting ? <><Spinner size="sm" /><span>Creating...</span></> : "Create Task"}
-            </button>
-          </form>
-        </div>
-
-        <div className="lg:col-span-3 opacity-0 fade-in-up stagger-2">
-          <div className="rounded-2xl border border-border bg-card overflow-hidden">
-            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground">All Tasks</h2>
-              {!loading && (
-                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-primary/10 text-primary">
-                  {tasks.length} task{tasks.length !== 1 ? "s" : ""}
-                </span>
-              )}
-            </div>
-
-            {loading ? (
-              <div className="flex items-center justify-center py-16">
-                <Spinner size="lg" />
-              </div>
-            ) : tasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-accent/50 flex items-center justify-center mb-3">
-                  <svg className="w-6 h-6 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                </div>
-                <p className="text-sm text-muted-foreground">No tasks yet</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Task</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Skill</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Difficulty</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Priority</th>
-                      <th className="px-4 py-3"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {tasks.map((task, i) => (
-                      <tr
-                        key={task.id}
-                        className="hover:bg-accent/20 transition-colors opacity-0 fade-in-up"
-                        style={{ animationDelay: `${0.05 * i}s` }}
-                      >
-                        <td className="px-6 py-4">
-                          <span className="text-sm font-medium text-foreground">{task.title}</span>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className="text-xs px-2.5 py-1 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/25 font-medium">
-                            {task.required_skill}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 h-1.5 rounded-full bg-accent overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${task.difficulty >= 8 ? "bg-red-500" : task.difficulty >= 5 ? "bg-yellow-500" : "bg-emerald-500"}`}
-                                style={{ width: `${(task.difficulty / 10) * 100}%` }}
-                              />
-                            </div>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${getDifficultyColor(task.difficulty)}`}>{task.difficulty}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${getPriorityColor(task.priority)}`}>
-                            {getPriorityLabel(task.priority)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4">
-                          <button
-                            onClick={() => handleDeleteTask(task.id, task.title)}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-500/15 text-muted-foreground hover:text-red-400 transition-colors"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+    <ContextGuard requireProject>
+      <div className="page">
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <h2 className="text-lg font-bold text-ink">Tasks</h2>
+            <p className="text-sm text-ink-3 mt-0.5">{tasks.length} task{tasks.length !== 1 ? 's' : ''}</p>
           </div>
         </div>
+
+        {/* Filter tabs */}
+        <div className="flex gap-1 mb-4 bg-white border border-border rounded-lg p-1 w-fit">
+          {['ALL','PENDING','ASSIGNED','COMPLETED'].map(s => (
+            <button key={s} onClick={() => setFilter(s)}
+              className={cn('px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
+                filter === s ? 'bg-violet text-white shadow-xs' : 'text-ink-2 hover:bg-stone'
+              )}>
+              {s}
+              {s !== 'ALL' && (
+                <span className="ml-1.5 font-mono">{tasks.filter(t => t.status === s).length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="card overflow-hidden">
+          {loading ? (
+            <div className="p-6 space-y-3">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex gap-4">
+                  <div className="skeleton h-3 rounded flex-1" />
+                  <div className="skeleton h-3 rounded w-20" />
+                  <div className="skeleton h-3 rounded w-16" />
+                </div>
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="p-16 text-center">
+              <CheckSquare size={32} className="text-ink-3 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-ink mb-1">No tasks yet</p>
+              <p className="text-sm text-ink-3 mb-4">Add tasks to start making smarter assignment decisions.</p>
+              <Button size="sm" icon={<Plus size={13} />} onClick={() => setCreateOpen(true)}>Add Task</Button>
+            </div>
+          ) : (
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Task</th><th>Skill</th><th>Level</th><th>Hours</th><th>Priority</th><th>Status</th><th className="w-16"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(task => (
+                  <tr key={task.id}>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <div className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', PRIORITY_COLORS[task.priority])} />
+                        <div>
+                          <p className="font-medium text-ink">{task.title}</p>
+                          {task.description && <p className="text-xs text-ink-3 truncate max-w-xs">{task.description}</p>}
+                        </div>
+                      </div>
+                    </td>
+                    <td><span className="font-mono text-[12px] bg-stone border border-border px-1.5 py-0.5 rounded">{task.required_skill}</span></td>
+                    <td><span className="font-mono text-sm text-ink-2">{task.required_level}/5</span></td>
+                    <td><span className="flex items-center gap-1 text-ink-2 text-sm"><Clock size={11} className="text-ink-3" />{task.estimated_hours}h</span></td>
+                    <td><Badge variant={PRIORITY_BADGE[task.priority]}>{task.priority}</Badge></td>
+                    <td><Badge variant={STATUS_BADGE[task.status]}>{task.status}</Badge></td>
+                    <td>
+                      <div className="flex gap-0.5">
+                        <button onClick={() => setEditTask(task)} className="p-1.5 rounded hover:bg-stone text-ink-3 hover:text-ink transition-colors"><Pencil size={13} /></button>
+                        <button onClick={() => handleDelete(task)} className="p-1.5 rounded hover:bg-rose-bg text-ink-3 hover:text-rose transition-colors"><Trash2 size={13} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
-    </div>
-  );
+
+      {selectedProject && (
+        <>
+          <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Add Task" subtitle="Define work for this sprint" width="lg">
+            <TaskForm projectId={selectedProject.id} onSubmit={handleCreate} loading={submitting} />
+          </Modal>
+          <Modal open={!!editTask} onClose={() => setEditTask(null)} title="Edit Task" width="lg">
+            {editTask && <TaskForm initial={editTask} projectId={selectedProject.id} onSubmit={handleEdit} loading={submitting} />}
+          </Modal>
+        </>
+      )}
+    </ContextGuard>
+  )
 }

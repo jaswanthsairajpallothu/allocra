@@ -1,263 +1,261 @@
-import { useState, useEffect } from "react";
-import { api, User, Skill } from "@/lib/api";
-import { showToast } from "@/components/Toast";
-import Spinner from "@/components/Spinner";
+import { useEffect, useState, useLayoutEffect } from 'react'
+import { Users, ChevronDown, ChevronUp, UserPlus } from 'lucide-react'
+import { useWorkspaceStore } from '@/store/workspaceStore'
+import { useAuthStore } from '@/store/authStore'
+import { membershipService } from '@/services/membershipService'
+import { MemberLoad, SkillEntry } from '@/types'
+import { useLayout } from '@/components/layout/AppLayout'
+import ContextGuard from '@/components/layout/ContextGuard'
+import Button from '@/components/ui/Button'
+import Badge from '@/components/ui/Badge'
+import Modal from '@/components/ui/Modal'
+import Avatar from '@/components/ui/Avatar'
+import SkillDropdown from '@/components/ui/SkillDropdown'
+import { showToast } from '@/components/ui/Toast'
+import { getErrorMessage, cn } from '@/lib/utils'
 
-const SKILL_SUGGESTIONS = [
-  "Python", "JavaScript", "TypeScript", "React", "Node.js",
-  "SQL", "Machine Learning", "Data Analysis", "DevOps", "Design",
-  "Java", "Go", "Rust", "AWS", "Docker",
-];
+function LoadBar({ pct, status }: { pct: number; status: string }) {
+  const color = status === 'SAFE' ? 'bg-emerald' : status === 'WARNING' ? 'bg-amber' : 'bg-rose'
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="flex-1 h-1.5 bg-stone rounded-full overflow-hidden">
+        <div className={cn('h-full rounded-full transition-all duration-500', color)} style={{ width: `${Math.min(pct, 100)}%` }} />
+      </div>
+      <span className="text-xs font-mono text-ink-3 w-9 text-right">{pct.toFixed(0)}%</span>
+    </div>
+  )
+}
 
-const SKILL_BADGE_COLORS = [
-  "bg-blue-500/15 text-blue-400 border border-blue-500/25",
-  "bg-purple-500/15 text-purple-400 border border-purple-500/25",
-  "bg-cyan-500/15 text-cyan-400 border border-cyan-500/25",
-  "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25",
-  "bg-amber-500/15 text-amber-400 border border-amber-500/25",
-  "bg-rose-500/15 text-rose-400 border border-rose-500/25",
-  "bg-indigo-500/15 text-indigo-400 border border-indigo-500/25",
-];
+function MemberRow({ member, isMe, onEditOpen }: { member: MemberLoad; isMe: boolean; onEditOpen: () => void }) {
+  const [expanded, setExpanded] = useState(false)
+  const statusVariant = member.status === 'SAFE' ? 'safe' : member.status === 'WARNING' ? 'warn' : 'danger'
 
-function getSkillColor(skillName: string) {
-  let hash = 0;
-  for (let i = 0; i < skillName.length; i++) {
-    hash = skillName.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return SKILL_BADGE_COLORS[Math.abs(hash) % SKILL_BADGE_COLORS.length];
+  return (
+    <>
+      <tr className="cursor-pointer" onClick={() => setExpanded(e => !e)}>
+        <td>
+          <div className="flex items-center gap-3">
+            <Avatar name={member.user_name} photo={localStorage.getItem(`avatar_${member.user_name}`)} size="md" />
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-[13px] font-semibold text-ink">{member.user_name}</p>
+                {isMe && <span className="text-[10px] font-bold text-violet bg-violet-muted px-1.5 py-0.5 rounded uppercase tracking-wide">You</span>}
+              </div>
+              <p className="text-xs text-ink-3">{member.available_hours}h available / week</p>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div className="flex flex-wrap gap-1">
+            {member.skills.slice(0, 4).map(s => (
+              <span key={s.skill} className="text-[11px] font-mono bg-stone border border-border px-1.5 py-0.5 rounded text-ink-2">
+                {s.skill} <span className="text-ink-3">{s.level}</span>
+              </span>
+            ))}
+            {member.skills.length > 4 && <span className="text-xs text-ink-3">+{member.skills.length - 4}</span>}
+          </div>
+        </td>
+        <td className="w-44"><LoadBar pct={member.load_pct} status={member.status} /></td>
+        <td><Badge variant={statusVariant} dot>{member.status}</Badge></td>
+        <td>
+          <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+            {isMe && (
+              <Button size="xs" variant="secondary" onClick={onEditOpen}>Edit profile</Button>
+            )}
+            {expanded ? <ChevronUp size={14} className="text-ink-3" /> : <ChevronDown size={14} className="text-ink-3" />}
+          </div>
+        </td>
+      </tr>
+
+      {expanded && (
+        <tr>
+          <td colSpan={5} className="bg-stone px-6 py-4 border-b border-border">
+            <div className="grid grid-cols-3 gap-6">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-3 mb-3">All Skills</p>
+                {member.skills.length === 0
+                  ? <p className="text-sm text-ink-3">No skills added</p>
+                  : <div className="space-y-2">
+                    {member.skills.map(s => (
+                      <div key={s.skill} className="flex items-center justify-between">
+                        <span className="text-[13px] text-ink">{s.skill}</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex gap-0.5">
+                            {[1,2,3,4,5].map(i => (
+                              <div key={i} className={cn('w-2 h-2 rounded-full', i <= s.level ? 'bg-violet' : 'bg-border-2')} />
+                            ))}
+                          </div>
+                          <span className="text-[11px] text-ink-3 w-20">
+                            {['','Beginner','Basic','Intermediate','Advanced','Expert'][s.level]}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                }
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-3 mb-3">Capacity</p>
+                <div className="space-y-2">
+                  {[
+                    ['Available hours', `${member.available_hours}h`],
+                    ['Assigned hours', `${member.assigned_hours.toFixed(1)}h`],
+                    ['Current load', `${member.load_pct.toFixed(0)}%`],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex items-center justify-between">
+                      <span className="text-[13px] text-ink-2">{k}</span>
+                      <span className="text-[13px] font-mono font-medium text-ink">{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-3 mb-3">Load Trend</p>
+                <div className="h-16 flex items-end gap-1">
+                  {[40, 55, 70, member.load_pct].map((v, i) => (
+                    <div key={i} className="flex-1 rounded-t-sm bg-violet/20 relative" style={{ height: `${Math.min(v, 100)}%` }}>
+                      {i === 3 && <div className="absolute inset-0 rounded-t-sm bg-violet/50" />}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-ink-3 mt-1">4-week estimate</p>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  )
 }
 
 export default function Team() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const { selectedProject } = useWorkspaceStore()
+  const { user } = useAuthStore()
+  const { setAction } = useLayout()
+  const [members, setMembers] = useState<MemberLoad[]>([])
+  const [loading, setLoading] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [myMember, setMyMember] = useState<MemberLoad | null>(null)
+  const [skills, setSkills] = useState<SkillEntry[]>([])
+  const [availHours, setAvailHours] = useState(40)
+  const [saving, setSaving] = useState(false)
 
-  const [name, setName] = useState("");
-  const [hours, setHours] = useState<number>(40);
-  const [skills, setSkills] = useState<Skill[]>([{ skill_name: "", level: 5 }]);
+  useLayoutEffect(() => {
+    setAction(null)
+    return () => setAction(null)
+  }, [])
 
-  const fetchUsers = async () => {
+  const fetchMembers = () => {
+    if (!selectedProject) return
+    setLoading(true)
+    membershipService.getTeamLoad(selectedProject.id)
+      .then(data => {
+        setMembers(data)
+        // Fix: match logged-in user by user_id
+        const me = data.find(m => m.user_id === user?.id)
+        if (me) { setMyMember(me); setSkills(me.skills); setAvailHours(me.available_hours) }
+      })
+      .catch(() => {}).finally(() => setLoading(false))
+  }
+
+  useEffect(fetchMembers, [selectedProject?.id])
+
+  const handleSave = async () => {
+    if (!myMember) return
+    setSaving(true)
     try {
-      const data = await api.getUsers();
-      setUsers(data);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchUsers(); }, []);
-
-  const addSkillRow = () => setSkills([...skills, { skill_name: "", level: 5 }]);
-  const removeSkillRow = (i: number) => setSkills(skills.filter((_, idx) => idx !== i));
-  const updateSkill = (i: number, field: keyof Skill, value: string | number) => {
-    setSkills(skills.map((s, idx) => idx === i ? { ...s, [field]: value } : s));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const validSkills = skills.filter((s) => s.skill_name.trim());
-    if (!name.trim()) return showToast("Name is required", "error");
-    if (validSkills.length === 0) return showToast("Add at least one skill", "error");
-
-    setSubmitting(true);
-    try {
-      await api.createUser({ name: name.trim(), available_hours: hours, skills: validSkills });
-      showToast(`${name} added to team!`);
-      setName("");
-      setHours(40);
-      setSkills([{ skill_name: "", level: 5 }]);
-      await fetchUsers();
-    } catch (err) {
-      showToast((err as Error).message, "error");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDeleteUser = async (userId: number, userName: string) => {
-    try {
-      await fetch(`https://allocra.onrender.com/api/v1/users/${userId}`, { method: "DELETE" });
-      await fetchUsers();
-      showToast(`${userName} removed`);
-    } catch {
-      showToast("Failed to delete user", "error");
-    }
-  };
+      await membershipService.updateSkills(myMember.membership_id, skills)
+      await membershipService.updateAvailability(myMember.membership_id, availHours)
+      setEditOpen(false)
+      fetchMembers()
+      showToast('Profile updated')
+    } catch (err) { showToast(getErrorMessage(err), 'error') }
+    finally { setSaving(false) }
+  }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <div className="mb-8 opacity-0 fade-in-up">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Team</h1>
-        <p className="text-muted-foreground">Add team members and manage their skills and availability.</p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        <div className="lg:col-span-2 opacity-0 fade-in-up stagger-1">
-          <form onSubmit={handleSubmit} className="rounded-2xl border border-border bg-card p-6 space-y-5">
-            <h2 className="text-lg font-semibold text-foreground">Add Team Member</h2>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">Full Name</label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Jane Smith"
-                className="w-full px-3 py-2.5 rounded-xl bg-accent/50 border border-input text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                Available Hours / Week
-                <span className="ml-2 text-primary font-bold">{hours}h</span>
-              </label>
-              <input
-                type="range"
-                min={1}
-                max={80}
-                value={hours}
-                onChange={(e) => setHours(Number(e.target.value))}
-                className="w-full accent-primary"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>1h</span>
-                <span>80h</span>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-foreground">Skills</label>
-                <button
-                  type="button"
-                  onClick={addSkillRow}
-                  className="text-xs text-primary hover:text-primary/80 transition-colors font-medium"
-                >
-                  + Add Skill
-                </button>
-              </div>
-              <div className="space-y-2">
-                {skills.map((skill, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <div className="flex-1 relative">
-                      <input
-                        value={skill.skill_name}
-                        onChange={(e) => updateSkill(i, "skill_name", e.target.value)}
-                        placeholder="e.g. Python"
-                        list={`skills-${i}`}
-                        className="w-full px-3 py-2 rounded-xl bg-accent/50 border border-input text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
-                      />
-                      <datalist id={`skills-${i}`}>
-                        {SKILL_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
-                      </datalist>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="text-xs text-muted-foreground w-4 text-right">{skill.level}</span>
-                      <input
-                        type="range"
-                        min={1}
-                        max={10}
-                        value={skill.level}
-                        onChange={(e) => updateSkill(i, "level", Number(e.target.value))}
-                        className="w-16 accent-primary"
-                      />
-                    </div>
-                    {skills.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeSkillRow(i)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/15 text-muted-foreground hover:text-red-400 transition-colors"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting ? <><Spinner size="sm" /><span>Adding...</span></> : "Add Team Member"}
-            </button>
-          </form>
+    <ContextGuard requireProject>
+      <div className="page">
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h2 className="text-lg font-bold text-ink">Team</h2>
+            <p className="text-sm text-ink-3 mt-0.5">{members.length} member{members.length !== 1 ? 's' : ''} · click a row to expand</p>
+          </div>
+          {myMember && (
+            <Button size="sm" variant="secondary" icon={<UserPlus size={13} />} onClick={() => setEditOpen(true)}>
+              Edit my profile
+            </Button>
+          )}
         </div>
 
-        <div className="lg:col-span-3 opacity-0 fade-in-up stagger-2">
-          <div className="rounded-2xl border border-border bg-card overflow-hidden">
-            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground">Team Members</h2>
-              {!loading && (
-                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-primary/10 text-primary">
-                  {users.length} member{users.length !== 1 ? "s" : ""}
-                </span>
-              )}
-            </div>
-
-            {loading ? (
-              <div className="flex items-center justify-center py-16">
-                <Spinner size="lg" />
-              </div>
-            ) : users.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-accent/50 flex items-center justify-center mb-3">
-                  <svg className="w-6 h-6 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                  </svg>
-                </div>
-                <p className="text-sm text-muted-foreground">No team members yet</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {users.map((user, i) => (
-                  <div
-                    key={user.id}
-                    className="px-6 py-4 hover:bg-accent/20 transition-colors opacity-0 fade-in-up"
-                    style={{ animationDelay: `${0.05 * i}s` }}
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="w-10 h-10 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-sm font-bold text-primary flex-shrink-0">
-                        {user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-foreground">{user.name}</span>
-                          <span className="text-xs text-muted-foreground px-2 py-0.5 rounded-full bg-accent/60">
-                            {user.available_hours}h/wk
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {user.skills.map((skill) => (
-                            <span
-                              key={skill.skill_name}
-                              className={`text-xs px-2 py-0.5 rounded-full font-medium ${getSkillColor(skill.skill_name)}`}
-                            >
-                              {skill.skill_name} <span className="opacity-70">Lv.{skill.level}</span>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteUser(user.id, user.name)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-500/15 text-muted-foreground hover:text-red-400 transition-colors flex-shrink-0"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
+        <div className="card overflow-hidden">
+          {loading ? (
+            <div className="p-6 space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="skeleton w-9 h-9 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <div className="skeleton h-3 w-32 rounded" />
+                    <div className="skeleton h-1.5 w-full rounded-full" />
                   </div>
+                </div>
+              ))}
+            </div>
+          ) : members.length === 0 ? (
+            <div className="p-16 text-center">
+              <Users size={32} className="text-ink-3 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-ink mb-1">No team members yet</p>
+              <p className="text-sm text-ink-3">Add members to this project from the Workspace page.</p>
+            </div>
+          ) : (
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Member</th><th>Skills</th><th className="w-44">Load</th><th>Status</th><th className="w-28"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.map(m => (
+                  <MemberRow
+                    key={m.user_id}
+                    member={m}
+                    isMe={m.user_id === user?.id}
+                    onEditOpen={() => {
+                      setMyMember(m)
+                      setSkills(m.skills)
+                      setAvailHours(m.available_hours)
+                      setEditOpen(true)
+                    }}
+                  />
                 ))}
-              </div>
-            )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Your Profile" subtitle="Skills and availability are project-specific" width="lg">
+        <div className="space-y-6">
+          <div>
+            <label className="block text-[12px] font-bold uppercase tracking-wide text-ink-2 mb-2">
+              Available hours per week
+            </label>
+            <div className="flex items-center gap-3">
+              <input type="number" min={1} max={80} className="field w-28"
+                value={availHours} onChange={e => setAvailHours(Number(e.target.value))} />
+              <span className="text-sm text-ink-3">hours / week</span>
+            </div>
+          </div>
+          <div>
+            <label className="block text-[12px] font-bold uppercase tracking-wide text-ink-2 mb-2">Skills</label>
+            <SkillDropdown value={skills} onChange={setSkills} />
+          </div>
+          <div className="flex gap-2 justify-end pt-2 border-t border-border">
+            <Button variant="secondary" size="sm" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button size="sm" loading={saving} onClick={handleSave}>Save changes</Button>
           </div>
         </div>
-      </div>
-    </div>
-  );
+      </Modal>
+    </ContextGuard>
+  )
 }

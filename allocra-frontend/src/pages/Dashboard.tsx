@@ -1,209 +1,207 @@
-import { useState, useEffect } from "react";
-import { Link } from "wouter";
-import { api, User, Task } from "@/lib/api";
-import { getPriorityLabel, getPriorityColor } from "@/lib/utils";
-import Spinner from "@/components/Spinner";
+import { useEffect, useState, useLayoutEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Zap, Users, TrendingUp, AlertTriangle, ArrowRight, Plus, ChevronRight, Building2, FolderOpen } from 'lucide-react'
+import { useWorkspaceStore } from '@/store/workspaceStore'
+import { useAuthStore } from '@/store/authStore'
+import { membershipService } from '@/services/membershipService'
+import { taskService } from '@/services/taskService'
+import { workspaceService } from '@/services/workspaceService'
+import { projectService } from '@/services/projectService'
+import { MemberLoad, Task } from '@/types'
+import { useLayout } from '@/components/layout/AppLayout'
+import ContextGuard from '@/components/layout/ContextGuard'
+import Button from '@/components/ui/Button'
+import Badge from '@/components/ui/Badge'
+import Avatar from '@/components/ui/Avatar'
+import { cn } from '@/lib/utils'
 
-interface StatCardProps {
-  label: string;
-  value: string | number;
-  icon: React.ReactNode;
-  color: string;
-  delay?: string;
-}
-
-function StatCard({ label, value, icon, color, delay = "" }: StatCardProps) {
+function LoadBar({ pct, status }: { pct: number; status: string }) {
+  const color = status === 'SAFE' ? 'bg-emerald' : status === 'WARNING' ? 'bg-amber' : 'bg-rose'
   return (
-    <div
-      className={`opacity-0 fade-in-up ${delay} rounded-2xl border border-border bg-card p-6 relative overflow-hidden group hover:border-primary/30 transition-all duration-300`}
-    >
-      <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${color} blur-2xl`} />
-      <div className="relative z-10">
-        <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center mb-4`}>
-          {icon}
-        </div>
-        <div className="text-3xl font-bold text-foreground mb-1">{value}</div>
-        <div className="text-sm text-muted-foreground font-medium">{label}</div>
+    <div className="flex items-center gap-2.5">
+      <div className="flex-1 h-1.5 bg-stone rounded-full overflow-hidden">
+        <div className={cn('h-full rounded-full transition-all duration-500', color)} style={{ width: `${Math.min(pct, 100)}%` }} />
       </div>
+      <span className="text-xs font-mono text-ink-3 w-8 text-right">{pct.toFixed(0)}%</span>
     </div>
-  );
+  )
 }
 
 export default function Dashboard() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate()
+  const { setAction } = useLayout()
+  const { user } = useAuthStore()
+  const { workspaces, selectedWorkspace, selectedProject, setWorkspaces, setProjects, selectWorkspace, selectProject } = useWorkspaceStore()
+  const [members, setMembers] = useState<MemberLoad[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useLayoutEffect(() => {
+    setAction(
+      <Button size="sm" icon={<Zap size={13} />} onClick={() => navigate('/allocation')}>
+        Run Allocation
+      </Button>
+    )
+    return () => setAction(null)
+  }, [])
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [usersData, tasksData] = await Promise.all([
-          api.getUsers(),
-          api.getTasks(),
-        ]);
-        setUsers(usersData);
-        setTasks(tasksData);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+    if (workspaces.length === 0) {
+      workspaceService.list().then(async wss => {
+        setWorkspaces(wss)
+        if (wss.length > 0) {
+          selectWorkspace(wss[0])
+          const projs = await projectService.list(wss[0].id)
+          setProjects(projs)
+          if (projs.length > 0) selectProject(projs[0])
+        }
+      }).catch(() => {})
+    }
+  }, [])
 
-  const highPriorityTasks = tasks.filter((t) => t.priority >= 3);
-  const totalSkills = users.reduce((sum, u) => sum + u.skills.length, 0);
+  useEffect(() => {
+    if (!selectedProject) return
+    setLoading(true)
+    Promise.all([
+      membershipService.getTeamLoad(selectedProject.id),
+      taskService.list(selectedProject.id),
+    ]).then(([m, t]) => { setMembers(m); setTasks(t) })
+      .catch(() => {}).finally(() => setLoading(false))
+  }, [selectedProject?.id])
+
+  if (!selectedWorkspace) return (
+    <div className="page">
+      <div className="mb-8">
+        <h2 className="text-lg font-bold text-ink">Welcome, {user?.name?.split(' ')[0]} 👋</h2>
+        <p className="text-ink-3 text-sm mt-1">Start by setting up your team space</p>
+      </div>
+      <div className="card p-10 text-center" style={{borderStyle:'dashed',borderWidth:2}}>
+        <div className="w-12 h-12 rounded-xl bg-violet-muted flex items-center justify-center mx-auto mb-4">
+          <Building2 size={22} className="text-violet" />
+        </div>
+        <h3 className="text-sm font-semibold text-ink mb-1">Create your first workspace</h3>
+        <p className="text-sm text-ink-3 max-w-xs mx-auto mb-5">A workspace organises your team and projects in one place.</p>
+        <Button icon={<Plus size={14} />} onClick={() => navigate('/workspace')}>Create workspace</Button>
+      </div>
+    </div>
+  )
+
+  const avgLoad = members.length > 0 ? Math.round(members.reduce((s, m) => s + m.load_pct, 0) / members.length) : 0
+  const overloaded = members.filter(m => m.status === 'OVERLOAD').length
+  const pending = tasks.filter(t => t.status === 'PENDING').length
+  const highPriority = tasks.filter(t => t.priority === 'HIGH' && t.status === 'PENDING').length
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      {/* Hero */}
-      <div className="mb-10 opacity-0 fade-in-up">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold mb-4 uppercase tracking-widest">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary glow-pulse" />
-          System Status: Active
-        </div>
-        <h1 className="text-4xl sm:text-5xl font-bold text-foreground mb-3">
-          Intelligent Task{" "}
-          <span className="text-primary">Allocation</span>
-        </h1>
-        <p className="text-lg text-muted-foreground max-w-2xl">
-          Automatically assign tasks to team members based on skills, availability, and workload using advanced scoring algorithms.
+    <div className="page">
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-ink">{selectedProject ? selectedProject.name : selectedWorkspace.name}</h2>
+        <p className="text-sm text-ink-3 mt-0.5">
+          {selectedProject ? `${selectedWorkspace.name} · Project overview` : 'Select a project from the sidebar'}
         </p>
       </div>
 
-      {/* Stats */}
-      {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <Spinner size="lg" />
+      {!selectedProject ? (
+        <div className="card p-10 text-center" style={{borderStyle:'dashed',borderWidth:2}}>
+          <div className="w-12 h-12 rounded-xl bg-violet-muted flex items-center justify-center mx-auto mb-4">
+            <FolderOpen size={22} className="text-violet" />
+          </div>
+          <h3 className="text-sm font-semibold text-ink mb-1">No project selected</h3>
+          <p className="text-sm text-ink-3 max-w-xs mx-auto mb-5">Use the sidebar to select or create a project.</p>
+          <Button size="sm" icon={<Plus size={13} />} onClick={() => navigate('/workspace')}>Create project</Button>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
-            <StatCard
-              label="Team Members"
-              value={users.length}
-              delay="stagger-1"
-              color="bg-primary/10"
-              icon={
-                <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              }
-            />
-            <StatCard
-              label="Total Tasks"
-              value={tasks.length}
-              delay="stagger-2"
-              color="bg-purple-500/10"
-              icon={
-                <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                </svg>
-              }
-            />
-            <StatCard
-              label="Skill Entries"
-              value={totalSkills}
-              delay="stagger-3"
-              color="bg-emerald-500/10"
-              icon={
-                <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              }
-            />
+          {/* Stat strip */}
+          <div className="grid grid-cols-4 gap-4 mb-5">
+            {[
+              { label: 'Avg Team Load', value: `${avgLoad}%`, sub: overloaded > 0 ? `${overloaded} overloaded` : 'Team balanced', color: overloaded > 0 ? 'text-rose' : 'text-emerald', bg: overloaded > 0 ? 'bg-rose-bg' : 'bg-emerald-bg', icon: TrendingUp },
+              { label: 'Members', value: String(members.length), sub: 'in this project', color: 'text-violet', bg: 'bg-violet-muted', icon: Users },
+              { label: 'Pending Tasks', value: String(pending), sub: `${highPriority} high priority`, color: 'text-amber', bg: 'bg-amber-bg', icon: Zap },
+              { label: 'Risk Level', value: overloaded > 0 ? 'HIGH' : 'LOW', sub: overloaded > 0 ? 'Action needed' : 'All clear', color: overloaded > 0 ? 'text-rose' : 'text-emerald', bg: overloaded > 0 ? 'bg-rose-bg' : 'bg-emerald-bg', icon: AlertTriangle },
+            ].map(({ label, value, sub, color, bg, icon: Icon }) => (
+              <div key={label} className="stat">
+                <div className="flex items-start justify-between mb-3">
+                  <p className="text-xs font-semibold text-ink-3">{label}</p>
+                  <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0', bg)}>
+                    <Icon size={13} className={color} />
+                  </div>
+                </div>
+                <p className={cn('text-2xl font-bold font-mono', color)}>{value}</p>
+                <p className="text-[11px] text-ink-3 mt-1">{sub}</p>
+              </div>
+            ))}
           </div>
 
-          {/* Recent data */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Team preview */}
-            <div className="rounded-2xl border border-border bg-card p-6 opacity-0 fade-in-up stagger-4">
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="text-lg font-semibold text-foreground">Team Members</h2>
-                <Link href="/team">
-                  <button className="text-xs text-primary hover:text-primary/80 transition-colors font-medium">
-                    Manage Team →
-                  </button>
-                </Link>
+          {/* Content grid */}
+          <div className="grid grid-cols-5 gap-4">
+            <div className="col-span-3 card p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-ink">Team Load</h3>
+                <button onClick={() => navigate('/team')} className="text-xs text-violet hover:underline flex items-center gap-1">View all <ArrowRight size={11} /></button>
               </div>
-              {users.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  No team members yet. Add some on the Team page.
-                </div>
+              {loading ? (
+                <div className="space-y-4">{[...Array(3)].map((_, i) => <div key={i} className="flex items-center gap-3"><div className="skeleton w-8 h-8 rounded-full" /><div className="flex-1 space-y-2"><div className="skeleton h-2.5 w-24 rounded" /><div className="skeleton h-1.5 rounded-full" /></div></div>)}</div>
+              ) : members.length === 0 ? (
+                <div className="py-8 text-center"><p className="text-sm text-ink-3 mb-3">No members yet.</p><Button size="sm" variant="secondary" onClick={() => navigate('/team')}>Set up team →</Button></div>
               ) : (
-                <div className="space-y-3">
-                  {users.slice(0, 5).map((user) => (
-                    <div key={user.id} className="flex items-center gap-3 p-3 rounded-xl bg-accent/30 hover:bg-accent/50 transition-colors">
-                      <div className="w-9 h-9 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
-                        {user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
-                      </div>
+                <div className="space-y-4">
+                  {members.slice(0, 6).map(m => (
+                    <div key={m.user_id} className="flex items-center gap-3">
+                      <Avatar name={m.user_name} photo={localStorage.getItem(`avatar_${m.user_name}`)} size="sm" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-foreground truncate">{user.name}</div>
-                        <div className="text-xs text-muted-foreground">{user.available_hours}h available · {user.skills.length} skill{user.skills.length !== 1 ? "s" : ""}</div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[13px] font-medium text-ink truncate">{m.user_name}</span>
+                          <Badge variant={m.status === 'SAFE' ? 'safe' : m.status === 'WARNING' ? 'warn' : 'danger'} dot>{m.status}</Badge>
+                        </div>
+                        <LoadBar pct={m.load_pct} status={m.status} />
                       </div>
                     </div>
                   ))}
-                  {users.length > 5 && (
-                    <div className="text-xs text-muted-foreground text-center pt-1">+{users.length - 5} more</div>
-                  )}
                 </div>
               )}
             </div>
 
-            {/* Task preview */}
-            <div className="rounded-2xl border border-border bg-card p-6 opacity-0 fade-in-up stagger-5">
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="text-lg font-semibold text-foreground">Active Tasks</h2>
-                <Link href="/tasks">
-                  <button className="text-xs text-primary hover:text-primary/80 transition-colors font-medium">
-                    View All →
-                  </button>
-                </Link>
-              </div>
-              {tasks.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  No tasks yet. Create some on the Tasks page.
+            <div className="col-span-2 space-y-4">
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-ink">Pending Tasks</h3>
+                  <button onClick={() => navigate('/tasks')} className="text-xs text-violet hover:underline flex items-center gap-1">All <ArrowRight size={11} /></button>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {tasks.slice(0, 5).map((task) => (
-                    <div key={task.id} className="flex items-center gap-3 p-3 rounded-xl bg-accent/30 hover:bg-accent/50 transition-colors">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-foreground truncate">{task.title}</div>
-                        <div className="text-xs text-muted-foreground truncate">{task.required_skill} · Difficulty {task.difficulty}/10</div>
+                {tasks.filter(t => t.status === 'PENDING').length === 0 ? (
+                  <p className="text-sm text-ink-3 py-4 text-center">All tasks assigned ✓</p>
+                ) : (
+                  <div className="space-y-2">
+                    {tasks.filter(t => t.status === 'PENDING').slice(0, 5).map(t => (
+                      <div key={t.id} className="flex items-center gap-2.5 py-1">
+                        <div className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', t.priority === 'HIGH' ? 'bg-rose' : t.priority === 'MEDIUM' ? 'bg-amber' : 'bg-emerald')} />
+                        <span className="text-[13px] text-ink truncate flex-1">{t.title}</span>
+                        <span className="text-[11px] font-mono text-ink-3">{t.estimated_hours}h</span>
                       </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${getPriorityColor(task.priority)}`}>
-                        {getPriorityLabel(task.priority)}
-                      </span>
-                    </div>
-                  ))}
-                  {tasks.length > 5 && (
-                    <div className="text-xs text-muted-foreground text-center pt-1">+{tasks.length - 5} more</div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* CTA */}
-          <div className="mt-6 rounded-2xl border border-primary/20 bg-primary/5 p-6 opacity-0 fade-in-up stagger-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold text-foreground mb-1">Ready to allocate?</h3>
-                <p className="text-sm text-muted-foreground">
-                  {highPriorityTasks.length > 0
-                    ? `${highPriorityTasks.length} high-priority task${highPriorityTasks.length > 1 ? "s" : ""} waiting for assignment.`
-                    : "Run the allocation algorithm to assign tasks to your team."}
-                </p>
+                    ))}
+                  </div>
+                )}
               </div>
-              <Link href="/allocation">
-                <button className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 active:scale-95 transition-all">
-                  Run Allocation
-                </button>
-              </Link>
+
+              <div className="card p-5">
+                <h3 className="text-sm font-semibold text-ink mb-3">Quick Actions</h3>
+                <div className="space-y-0.5">
+                  {[
+                    { label: 'Run allocation', to: '/allocation', icon: Zap },
+                    { label: 'View team capacity', to: '/team', icon: Users },
+                    { label: 'Add tasks', to: '/tasks', icon: TrendingUp },
+                  ].map(({ label, to, icon: Icon }) => (
+                    <button key={to} onClick={() => navigate(to)} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-stone transition-colors text-left group">
+                      <Icon size={13} className="text-ink-3 group-hover:text-violet transition-colors" />
+                      <span className="text-[13px] text-ink-2 group-hover:text-ink transition-colors">{label}</span>
+                      <ChevronRight size={12} className="text-ink-3 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </>
       )}
     </div>
-  );
+  )
 }

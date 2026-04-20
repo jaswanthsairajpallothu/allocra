@@ -16,10 +16,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Allocra API", description="Decision Intelligence System for Teams", version="2.0.0",
               docs_url="/docs" if settings.APP_DEBUG else None, redoc_url="/redoc" if settings.APP_DEBUG else None, lifespan=lifespan)
 
-app.add_middleware(CORSMiddleware,
-    allow_origins=["*"] if settings.APP_ENV == "development" else ["https://allocra.vercel.app"],
-    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(api_router)
 
 @app.get("/", include_in_schema=False)

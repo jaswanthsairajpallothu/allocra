@@ -19,6 +19,8 @@ app = FastAPI(title="Allocra API", description="Decision Intelligence System for
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://rajpallothu.online",
+        "https://www.rajpallothu.online",
         "https://main.dyw6v0jkjzelv.amplifyapp.com"
     ],
     allow_credentials=True,

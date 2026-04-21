@@ -23,7 +23,7 @@ function TaskForm({ initial, projectId, onSubmit, loading }: {
   const [skill, setSkill] = useState(initial?.required_skill || '')
   const [level, setLevel] = useState(initial?.required_level || 3)
   const [hours, setHours] = useState(initial?.estimated_hours || 8)
-  const [priority, setPriority] = useState(initial?.priority || 'MEDIUM')
+  const [priority, setPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>(initial?.priority || 'MEDIUM')
   const [desc, setDesc] = useState(initial?.description || '')
 
   return (
@@ -50,7 +50,7 @@ function TaskForm({ initial, projectId, onSubmit, loading }: {
         </div>
         <div>
           <label className="block text-[12px] font-bold uppercase tracking-wide text-ink-2 mb-1.5">Priority</label>
-          <select className="field" value={priority} onChange={e => setPriority(e.target.value)}>
+          <select className="field" value={priority} onChange={e => setPriority(e.target.value as 'LOW' | 'MEDIUM' | 'HIGH')}>
             {['HIGH','MEDIUM','LOW'].map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>

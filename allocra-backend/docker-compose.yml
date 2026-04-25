@@ -1,30 +1,34 @@
 version: "3.9"
+
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: allocra_user
-      POSTGRES_PASSWORD: allocra_pass
-      POSTGRES_DB: allocra_db
+      POSTGRES_USER: allocra
+      POSTGRES_PASSWORD: allocra_local
+      POSTGRES_DB: allocra
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U allocra_user -d allocra_db"]
+      test: ["CMD-SHELL", "pg_isready -U allocra"]
       interval: 5s
       timeout: 5s
-      retries: 5
-  backend:
+      retries: 10
+
+  api:
     build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://allocra:allocra_local@db:5432/allocra
     ports:
       - "8000:8000"
-    env_file: .env
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - .:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
 volumes:
-  postgres_data:
+  pg_data:

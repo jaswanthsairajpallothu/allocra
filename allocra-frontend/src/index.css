@@ -1,0 +1,146 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark mode only — Allocra design system */
+:root {
+  --button-outline: rgba(255,255,255, .10);
+  --badge-outline: rgba(255,255,255, .05);
+  --opaque-button-border-intensity: 9;
+  --elevate-1: rgba(255,255,255, .04);
+  --elevate-2: rgba(255,255,255, .09);
+
+  --background: 231 30% 8%;
+  --foreground: 210 40% 96%;
+  --border: 232 23% 22%;
+  --input: 232 23% 28%;
+  --ring: 234 100% 68%;
+
+  --card: 234 26% 12%;
+  --card-foreground: 210 40% 96%;
+  --card-border: 232 23% 22%;
+
+  --popover: 234 26% 16%;
+  --popover-foreground: 210 40% 96%;
+  --popover-border: 232 23% 22%;
+
+  --primary: 234 100% 68%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 168 100% 41%;
+  --secondary-foreground: 0 0% 100%;
+
+  --muted: 234 26% 16%;
+  --muted-foreground: 215 20% 65%;
+
+  --accent: 234 26% 20%;
+  --accent-foreground: 210 40% 96%;
+
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --chart-1: 234 100% 68%;
+  --chart-2: 168 100% 41%;
+  --chart-3: 38 92% 50%;
+  --chart-4: 0 84% 60%;
+  --chart-5: 160 84% 39%;
+
+  --sidebar: 231 35% 6%;
+  --sidebar-foreground: 210 40% 96%;
+  --sidebar-border: 232 23% 18%;
+  --sidebar-primary: 234 100% 68%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 234 26% 14%;
+  --sidebar-accent-foreground: 210 40% 96%;
+  --sidebar-ring: 234 100% 68%;
+
+  --radius: 0.75rem;
+
+  --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0,0.4);
+  --shadow-xs: 0px 2px 4px 0px rgba(0,0,0,0.4);
+  --shadow-sm: 0px 2px 8px 0px rgba(0,0,0,0.5);
+  --shadow: 0px 4px 12px 0px rgba(0,0,0,0.5);
+  --shadow-md: 0px 4px 16px 0px rgba(0,0,0,0.6);
+  --shadow-lg: 0px 8px 24px 0px rgba(0,0,0,0.6);
+  --shadow-xl: 0px 12px 32px 0px rgba(0,0,0,0.7);
+  --shadow-2xl: 0px 24px 48px 0px rgba(0,0,0,0.8);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply font-sans antialiased;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: 'Inter', sans-serif;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+
+@layer utilities {
+  input[type="search"]::-webkit-search-cancel-button {
+    display: none;
+  }
+
+  [contenteditable][data-placeholder]:empty::before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+  }
+
+  .hover-elevate,
+  .active-elevate,
+  .hover-elevate-2,
+  .active-elevate-2 {
+    position: relative;
+    z-index: 0;
+  }
+
+  .hover-elevate::after,
+  .active-elevate::after,
+  .hover-elevate-2::after,
+  .active-elevate-2::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    border-radius: inherit;
+    z-index: 999;
+  }
+
+  .hover-elevate:hover::after,
+  .active-elevate:active::after {
+    background-color: var(--elevate-1);
+  }
+
+  .hover-elevate-2:hover::after,
+  .active-elevate-2:active::after {
+    background-color: var(--elevate-2);
+  }
+}

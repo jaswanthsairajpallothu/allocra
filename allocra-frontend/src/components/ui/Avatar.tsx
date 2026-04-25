@@ -1,77 +1,50 @@
-import { useRef } from 'react'
-import { Camera } from 'lucide-react'
-import { cn, getInitials } from '@/lib/utils'
+"use client"
 
-interface AvatarProps {
-  name: string
-  photo?: string | null
-  size?: 'sm' | 'md' | 'lg' | 'xl'
-  editable?: boolean
-  onPhotoChange?: (dataUrl: string) => void
-  className?: string
-}
+import * as React from "react"
+import * as AvatarPrimitive from "@radix-ui/react-avatar"
 
-const sizes = {
-  sm: 'w-7 h-7 text-[10px]',
-  md: 'w-9 h-9 text-xs',
-  lg: 'w-12 h-12 text-sm',
-  xl: 'w-20 h-20 text-xl',
-}
+import { cn } from "@/lib/utils"
 
-// Generate a stable color from name
-function colorFromName(name: string): string {
-  const colors = [
-    'bg-violet text-white',
-    'bg-indigo-500 text-white',
-    'bg-blue-500 text-white',
-    'bg-emerald text-white',
-    'bg-amber text-white',
-    'bg-rose text-white',
-    'bg-purple-500 text-white',
-    'bg-teal-500 text-white',
-  ]
-  const index = name.charCodeAt(0) % colors.length
-  return colors[index]
-}
+const Avatar = React.forwardRef<
+  React.ElementRef<typeof AvatarPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <AvatarPrimitive.Root
+    ref={ref}
+    className={cn(
+      "relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full",
+      className
+    )}
+    {...props}
+  />
+))
+Avatar.displayName = AvatarPrimitive.Root.displayName
 
-export default function Avatar({ name, photo, size = 'md', editable, onPhotoChange, className }: AvatarProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
+const AvatarImage = React.forwardRef<
+  React.ElementRef<typeof AvatarPrimitive.Image>,
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
+>(({ className, ...props }, ref) => (
+  <AvatarPrimitive.Image
+    ref={ref}
+    className={cn("aspect-square h-full w-full", className)}
+    {...props}
+  />
+))
+AvatarImage.displayName = AvatarPrimitive.Image.displayName
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = reader.result as string
-      localStorage.setItem(`avatar_${name}`, dataUrl)
-      onPhotoChange?.(dataUrl)
-    }
-    reader.readAsDataURL(file)
-  }
+const AvatarFallback = React.forwardRef<
+  React.ElementRef<typeof AvatarPrimitive.Fallback>,
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Fallback>
+>(({ className, ...props }, ref) => (
+  <AvatarPrimitive.Fallback
+    ref={ref}
+    className={cn(
+      "flex h-full w-full items-center justify-center rounded-full bg-muted",
+      className
+    )}
+    {...props}
+  />
+))
+AvatarFallback.displayName = AvatarPrimitive.Fallback.displayName
 
-  const colorClass = colorFromName(name)
-
-  return (
-    <div className={cn('relative inline-flex flex-shrink-0', className)}>
-      {photo
-        ? <img src={photo} alt={name} className={cn('rounded-full object-cover', sizes[size])} />
-        : (
-          <div className={cn('rounded-full flex items-center justify-center font-bold flex-shrink-0', sizes[size], colorClass)}>
-            {getInitials(name)}
-          </div>
-        )
-      }
-      {editable && (
-        <>
-          <button
-            onClick={() => inputRef.current?.click()}
-            className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
-          >
-            <Camera size={size === 'xl' ? 20 : 14} className="text-white" />
-          </button>
-          <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-        </>
-      )}
-    </div>
-  )
-}
+export { Avatar, AvatarImage, AvatarFallback }

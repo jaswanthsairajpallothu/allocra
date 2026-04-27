@@ -42,7 +42,10 @@ class TaskPriority(str, enum.Enum):
 class TaskStatus(str, enum.Enum):
     PENDING = "PENDING"
     ASSIGNED = "ASSIGNED"
+    IN_PROGRESS = "IN_PROGRESS"
+    SUBMITTED = "SUBMITTED"
     COMPLETED = "COMPLETED"
+    REJECTED = "REJECTED"
 
 
 class RiskLevel(str, enum.Enum):
@@ -208,6 +211,61 @@ class Task(Base):
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
     assignee: Mapped[Optional["User"]] = relationship(foreign_keys=[assigned_to])
+    submissions: Mapped[List["TaskSubmission"]] = relationship(back_populates="task", cascade="all, delete-orphan", order_by="TaskSubmission.created_at.desc()")
+
+
+# ─────────────────────────────────────────────
+# TASK SUBMISSION
+# ─────────────────────────────────────────────
+class TaskSubmission(Base):
+    """
+    A member submits work for review.
+    Only the assigned member can submit.
+    Multiple submissions allowed (after REJECTED → resubmit).
+    """
+    __tablename__ = "task_submissions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    task_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    submitted_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # links: ["https://github.com/...", "https://figma.com/..."]
+    links: Mapped[List] = mapped_column(JSON, default=list)
+    # files: ["https://storage.../file1.pdf", ...]
+    files: Mapped[List] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    task: Mapped["Task"] = relationship(back_populates="submissions")
+    submitter: Mapped["User"] = relationship(foreign_keys=[submitted_by])
+    review: Mapped[Optional["TaskReview"]] = relationship(back_populates="submission", uselist=False, cascade="all, delete-orphan")
+
+
+# ─────────────────────────────────────────────
+# TASK REVIEW
+# ─────────────────────────────────────────────
+class ReviewDecision(str, enum.Enum):
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class TaskReview(Base):
+    """
+    Project owner / workspace owner reviews a submission.
+    APPROVED → task.status = COMPLETED
+    REJECTED → task.status = IN_PROGRESS (member can resubmit)
+    """
+    __tablename__ = "task_reviews"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    submission_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("task_submissions.id", ondelete="CASCADE"), nullable=False)
+    reviewed_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    decision: Mapped[ReviewDecision] = mapped_column(SAEnum(ReviewDecision), nullable=False)
+    rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1–5
+    feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    submission: Mapped["TaskSubmission"] = relationship(back_populates="review")
+    reviewer: Mapped[Optional["User"]] = relationship(foreign_keys=[reviewed_by])
 
 
 # ─────────────────────────────────────────────

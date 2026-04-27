@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
 
-from app.config import settings
-from app.routers import auth, workspaces, projects, tasks, allocate, notifications, chat, billing, analytics
+from app.config import settings, log_config
+from app.routers import auth, workspaces, projects, tasks, allocate, notifications, chat, billing, analytics, submissions
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -17,14 +17,29 @@ app = FastAPI(
     redoc_url=None,
 )
 
+@app.on_event("startup")
+async def on_startup():
+    log_config()  # prints + validates all env vars at boot
+
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=[
+#         "https://sublime-approach-gleeful.ngrok-free.dev"
+#     ],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
 # ── Global exception handler ─────────────────────────────────────────────────
 @app.exception_handler(Exception)
@@ -40,6 +55,7 @@ app.include_router(auth.router)
 app.include_router(workspaces.router)
 app.include_router(projects.router)
 app.include_router(tasks.router)
+app.include_router(submissions.router)
 app.include_router(allocate.router)
 app.include_router(notifications.router)
 app.include_router(chat.router)

@@ -3,7 +3,7 @@ from uuid import UUID
 from datetime import datetime
 from typing import Optional, List, Any, Dict
 from pydantic import BaseModel, EmailStr, field_validator, model_validator
-from app.models import PlanTier, TaskPriority, TaskStatus, RiskLevel, LoadStatus, NotificationType
+from app.models import PlanTier, TaskPriority, TaskStatus, RiskLevel, LoadStatus, NotificationType, ReviewDecision
 
 
 # ────────────── AUTH ──────────────
@@ -378,3 +378,55 @@ class NotificationPreferencesUpdate(BaseModel):
 class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     avatar_url: Optional[str] = None
+
+
+# ────────────── TASK SUBMISSION ──────────────
+class TaskSubmitRequest(BaseModel):
+    description: Optional[str] = None
+    links: List[str] = []
+    files: List[str] = []
+
+
+class TaskReviewOut(BaseModel):
+    id: UUID
+    submission_id: UUID
+    reviewed_by: Optional[UUID]
+    reviewer_name: Optional[str]
+    decision: ReviewDecision
+    rating: Optional[int]
+    feedback: Optional[str]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TaskSubmissionOut(BaseModel):
+    id: UUID
+    task_id: UUID
+    submitted_by: UUID
+    submitter_name: str
+    description: Optional[str]
+    links: List[str]
+    files: List[str]
+    created_at: datetime
+    review: Optional[TaskReviewOut]
+
+    model_config = {"from_attributes": True}
+
+
+class TaskReviewRequest(BaseModel):
+    decision: ReviewDecision
+    rating: Optional[int] = None
+    feedback: Optional[str] = None
+
+    @field_validator("rating")
+    @classmethod
+    def rating_range(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not 1 <= v <= 5:
+            raise ValueError("rating must be 1-5")
+        return v
+
+
+# ────────────── DEV TOOLS ──────────────
+class DevUpgradeRequest(BaseModel):
+    plan: PlanTier

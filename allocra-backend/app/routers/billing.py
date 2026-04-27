@@ -10,7 +10,7 @@ from uuid import UUID
 from app.database import get_db
 from app.auth import get_current_user
 from app.models import User, Subscription, BillingEvent, PlanTier, SubscriptionStatus
-from app.schemas import CreateOrder, VerifyPayment, CouponApply, BillingEventOut
+from app.schemas import CreateOrder, VerifyPayment, CouponApply, BillingEventOut, DevUpgradeRequest
 from app.config import settings
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -181,3 +181,33 @@ async def billing_history(
         .order_by(BillingEvent.created_at.desc())
     )
     return result.scalars().all()
+
+
+@router.post("/dev-upgrade", response_model=dict)
+async def dev_upgrade(
+    body: DevUpgradeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    DEV ONLY — Switch plan without payment.
+    Blocked in production (ENVIRONMENT != 'development').
+    Remove this endpoint before public launch.
+    """
+    if settings.ENVIRONMENT != "development":
+        raise HTTPException(
+            status_code=403,
+            detail="This endpoint is only available in development mode."
+        )
+
+    old_plan = current_user.plan_tier.value
+    current_user.plan_tier = body.plan
+    await db.flush()
+
+    return {
+        "success": True,
+        "previous_plan": old_plan,
+        "current_plan": body.plan.value,
+        "message": f"Dev mode: plan switched from {old_plan} to {body.plan.value}.",
+        "warning": "This is a development-only endpoint. Remove before production.",
+    }

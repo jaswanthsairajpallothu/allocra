@@ -17,7 +17,7 @@ router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
 
 def _plan_workspace_limit(plan: str) -> int:
-    return {"FREE": 1, "PRO": 3, "TEAM": 10}.get(plan, 1)
+    return {"FREE": 3, "PRO": 5, "TEAM": 10}.get(plan, 3)
 
 
 async def _workspace_out(ws: Workspace, db: AsyncSession) -> WorkspaceOut:
@@ -44,13 +44,10 @@ async def create_workspace(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Enforce plan workspace limit
+    # Enforce plan workspace limit — count workspaces this user CREATED
     limit = _plan_workspace_limit(current_user.plan_tier.value)
     existing_count = await db.scalar(
-        select(func.count())
-        .select_from(WorkspaceMember)
-        .join(Workspace, Workspace.id == WorkspaceMember.workspace_id)
-        .where(WorkspaceMember.user_id == current_user.id, Workspace.creator_id == current_user.id)
+        select(func.count()).where(Workspace.creator_id == current_user.id)
     )
     if (existing_count or 0) >= limit:
         raise HTTPException(

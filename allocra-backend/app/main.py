@@ -1,7 +1,9 @@
+import os
+import uvicorn
+import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import logging
 
 from app.config import settings, log_config
 from app.routers import auth, workspaces, projects, tasks, allocate, notifications, chat, billing, analytics, submissions
@@ -29,17 +31,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=[
-#         "https://sublime-approach-gleeful.ngrok-free.dev"
-#     ],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
 
 # ── Global exception handler ─────────────────────────────────────────────────
 @app.exception_handler(Exception)
@@ -79,3 +70,12 @@ async def health_check():
         "database": db_status,
         "environment": settings.ENVIRONMENT,
     }
+
+# ── Cloud Run Entry Point ─────────────────────────────────────────────────────
+if __name__ == "__main__":
+    # Get the port from the environment variable 'PORT' (GCP sets this to 8080)
+    # If not found, it defaults to 8080 for local testing
+    port = int(os.environ.get("PORT", 8080))
+    
+    # Run the app on 0.0.0.0 so Google's proxy can reach it
+    uvicorn.run(app, host="0.0.0.0", port=port)

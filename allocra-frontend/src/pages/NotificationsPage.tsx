@@ -1,141 +1,98 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api from "@/api/client";
-
+import { useNotifications, useMarkAllRead } from "@/hooks/useNotifications";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/shared/EmptyState";
+import { Card } from "@/components/ui/card";
+import { CardSkeleton } from "@/components/states/PageSkeleton";
+import { EmptyState, ErrorState } from "@/components/states/StateViews";
 import { Bell, CheckCheck } from "lucide-react";
-import { cn } from "@/lib/utils";
+import type { Notification } from "@/types";
 
 export default function NotificationsPage() {
-  const queryClient = useQueryClient();
+  const { data, isLoading, isError, refetch } = useNotifications();
+  const markAll = useMarkAllRead();
 
-  // ✅ replaced useListNotifications
-  const { data: notifications, isLoading } = useQuery({
-    queryKey: ["notifications"],
-    queryFn: async () => (await api.get("/notifications")).data,
-  });
-
-  // ✅ replaced useMarkAllNotificationsRead
-  const markAll = useMutation({
-    mutationFn: async () => {
-      await api.post("/notifications/mark-all-read");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    },
-  });
-
-  // ✅ replaced useMarkNotificationRead
-  const markOne = useMutation({
-    mutationFn: async (id: string) => {
-      await api.post(`/notifications/${id}/read`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    },
-  });
-
-  const handleMarkAll = async () => {
-    await markAll.mutateAsync();
-  };
-
-  const handleMarkOne = async (id: string) => {
-    await markOne.mutateAsync(id);
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  const unread = notifications?.filter((n: any) => !n.is_read) ?? [];
-  const read = notifications?.filter((n: any) => n.is_read) ?? [];
+  const all = data ?? [];
+  const unread = all.filter((n) => !n.is_read);
+  const read = all.filter((n) => n.is_read);
 
   return (
-    <div className="p-6 max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-3xl space-y-6 p-6 md:p-10">
+      <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
-          <p className="text-muted-foreground text-sm mt-1">{unread.length} unread</p>
+          <h1 className="text-3xl font-bold tracking-tight">Notifications</h1>
+          <p className="mt-1 text-muted-foreground">
+            Stay on top of changes across your workspaces.
+          </p>
         </div>
-
         {unread.length > 0 && (
           <Button
             variant="outline"
-            size="sm"
-            className="border-border"
-            onClick={handleMarkAll}
+            onClick={() => markAll.mutate()}
             disabled={markAll.isPending}
           >
-            <CheckCheck className="w-4 h-4 mr-1" />
-            Mark all read
+            <CheckCheck className="mr-1.5 h-4 w-4" /> Mark all read
           </Button>
         )}
-      </div>
+      </header>
 
-      {(!notifications || notifications.length === 0) && (
+      {isLoading && <CardSkeleton count={3} />}
+      {isError && <ErrorState onRetry={() => refetch()} />}
+
+      {!isLoading && !isError && all.length === 0 && (
         <EmptyState
-          icon={Bell}
-          title="All caught up!"
-          description="You have no notifications right now."
+          icon={<Bell className="h-6 w-6" />}
+          title="You're all caught up"
+          message="No notifications right now."
         />
       )}
 
       {unread.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider px-1">
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Unread
-          </p>
-
-          {unread.map((notif: any) => (
-            <div
-              key={notif.id}
-              className="bg-card border border-primary/20 rounded-xl p-4 flex items-start gap-3 hover-elevate cursor-pointer"
-              onClick={() => notif.id && handleMarkOne(notif.id)}
-            >
-              <div className="w-2 h-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
-
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-foreground">{notif.body}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {notif.created_at
-                    ? new Date(notif.created_at).toLocaleString()
-                    : ""}
-                </p>
-              </div>
-            </div>
+          </h2>
+          {unread.map((n) => (
+            <NotifCard key={n.id} n={n} />
           ))}
-        </div>
+        </section>
       )}
 
       {read.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider px-1">
-            Read
-          </p>
-
-          {read.map((notif: any) => (
-            <div
-              key={notif.id}
-              className="bg-card border border-border rounded-xl p-4 flex items-start gap-3 opacity-60"
-            >
-              <div className="w-2 h-2 rounded-full bg-muted-foreground mt-1.5 flex-shrink-0" />
-
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-foreground">{notif.body}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {notif.created_at
-                    ? new Date(notif.created_at).toLocaleString()
-                    : ""}
-                </p>
-              </div>
-            </div>
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Earlier
+          </h2>
+          {read.map((n) => (
+            <NotifCard key={n.id} n={n} />
           ))}
-        </div>
+        </section>
       )}
     </div>
+  );
+}
+
+function NotifCard({ n }: { n: Notification }) {
+  return (
+    <Card
+      className={`flex gap-3 p-4 transition-colors ${
+        !n.is_read ? "border-primary/30 bg-accent/30" : ""
+      }`}
+    >
+      <div className="mt-1">
+        <span
+          className={`block h-2 w-2 rounded-full ${
+            !n.is_read ? "bg-primary" : "bg-muted-foreground/30"
+          }`}
+        />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium">{n.title}</div>
+        {n.body && (
+          <p className="mt-0.5 text-sm text-muted-foreground">{n.body}</p>
+        )}
+        <div className="mt-1 text-xs text-muted-foreground">
+          {n.created_at ? new Date(n.created_at).toLocaleString() : ""}
+        </div>
+      </div>
+    </Card>
   );
 }

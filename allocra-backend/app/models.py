@@ -87,7 +87,11 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     display_id: Mapped[str] = mapped_column(String(12), unique=True, nullable=False, index=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    plan_tier: Mapped[PlanTier] = mapped_column(SAEnum(PlanTier), default=PlanTier.FREE, nullable=False)
+    plan_tier: Mapped[PlanTier] = mapped_column(
+        SAEnum(PlanTier, name="plantier"),
+        default=PlanTier.FREE,
+        nullable=False
+    )
     email_notifications: Mapped[bool] = mapped_column(Boolean, default=True)
     in_app_notifications: Mapped[bool] = mapped_column(Boolean, default=True)
     onboarding_step: Mapped[int] = mapped_column(Integer, default=0)
@@ -203,8 +207,15 @@ class Task(Base):
     required_skill: Mapped[str] = mapped_column(String(128), nullable=False)
     required_level: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-5
     estimated_hours: Mapped[float] = mapped_column(Float, nullable=False)
-    priority: Mapped[TaskPriority] = mapped_column(SAEnum(TaskPriority), default=TaskPriority.MEDIUM)
-    status: Mapped[TaskStatus] = mapped_column(SAEnum(TaskStatus), default=TaskStatus.PENDING)
+    priority: Mapped[TaskPriority] = mapped_column(
+        SAEnum(TaskPriority, name="taskpriority"),
+        default=TaskPriority.MEDIUM
+    )
+
+    status: Mapped[TaskStatus] = mapped_column(
+        SAEnum(TaskStatus, name="taskstatus"),
+        default=TaskStatus.PENDING
+    )
     assigned_to: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -259,7 +270,10 @@ class TaskReview(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     submission_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("task_submissions.id", ondelete="CASCADE"), nullable=False)
     reviewed_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    decision: Mapped[ReviewDecision] = mapped_column(SAEnum(ReviewDecision), nullable=False)
+    decision: Mapped[ReviewDecision] = mapped_column(
+        SAEnum(ReviewDecision, name="reviewdecision"),
+        nullable=False
+    )
     rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1–5
     feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -296,7 +310,10 @@ class Notification(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    type: Mapped[NotificationType] = mapped_column(SAEnum(NotificationType), nullable=False)
+    type: Mapped[NotificationType] = mapped_column(
+        SAEnum(NotificationType, name="notificationtype"),
+        nullable=False
+    )
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     action_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
@@ -335,8 +352,15 @@ class Subscription(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    plan: Mapped[PlanTier] = mapped_column(SAEnum(PlanTier), nullable=False)
-    status: Mapped[SubscriptionStatus] = mapped_column(SAEnum(SubscriptionStatus), default=SubscriptionStatus.ACTIVE)
+    plan: Mapped[PlanTier] = mapped_column(
+        SAEnum(PlanTier, name="plantier"),
+        nullable=False
+    )
+
+    status: Mapped[SubscriptionStatus] = mapped_column(
+        SAEnum(SubscriptionStatus, name="subscriptionstatus"),
+        default=SubscriptionStatus.ACTIVE
+    )
     razorpay_subscription_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     end_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -355,7 +379,10 @@ class BillingEvent(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)  # Paid/Failed/Refunded
     razorpay_payment_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     razorpay_order_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    plan: Mapped[PlanTier] = mapped_column(SAEnum(PlanTier), nullable=False)
+    plan: Mapped[PlanTier] = mapped_column(
+        SAEnum(PlanTier, name="plantier"),
+        nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     user: Mapped["User"] = relationship(back_populates="billing_events")

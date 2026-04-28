@@ -1,291 +1,408 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api from "@/api/client";
-
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PlanBadge } from "@/components/shared/PlanBadge";
-import { toast } from "@/hooks/use-toast";
-import { Check, Zap, Crown, Tag } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Check, X, Sparkles, Loader2 } from "lucide-react";
+import toast from "react-hot-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMe } from "@/hooks/useAuth";
+import { billingApi } from "@/api/endpoints";
+import { extractError } from "@/api/helpers";
+import { loadRazorpay, openRazorpayCheckout } from "@/lib/razorpay";
+import type { PlanTier } from "@/types";
 
-const PLANS = [
+type Plan = {
+  name: string;
+  tier: PlanTier;
+  priceMonthly: string;
+  priceAnnual?: string;
+  tagline: string;
+  limits: string[];
+  features: string[];
+  featured?: boolean;
+};
+
+const PLANS: Plan[] = [
   {
-    id: "PRO",
-    name: "Pro",
-    price: "$12/mo",
-    icon: Zap,
-    color: "primary",
-    features: [
-      "Unlimited projects",
-      "AI allocation engine",
-      "Allocation history (30 days)",
-      "Project chat",
-      "Priority support",
-    ],
+    name: "Free",
+    tier: "FREE",
+    priceMonthly: "₹0",
+    tagline: "Get started",
+    limits: ["1 workspace", "3 projects / workspace", "10 members / project"],
+    features: ["Basic allocation", "Task management", "Team visibility"],
   },
   {
-    id: "TEAM",
-    name: "Team",
-    price: "$29/mo",
-    icon: Crown,
-    color: "secondary",
+    name: "Pro",
+    tier: "PRO",
+    priceMonthly: "₹199",
+    priceAnnual: "₹1,799 / year",
+    tagline: "For growing teams",
+    limits: ["3 workspaces", "6 projects / workspace", "20 members / project"],
     features: [
-      "Everything in Pro",
-      "Advanced analytics",
-      "Custom allocation rules",
-      "Allocation history (1 year)",
-      "Team billing dashboard",
-      "Dedicated account manager",
+      "Advanced scoring + breakdown",
+      "Workload visibility",
+      "Allocation history",
+      "Project chat + threads",
+      "File uploads in chat",
+      "Email notifications",
+    ],
+    featured: true,
+  },
+  {
+    name: "Team",
+    tier: "TEAM",
+    priceMonthly: "₹499",
+    priceAnnual: "₹3,799 / year",
+    tagline: "Scale together",
+    limits: ["10 workspaces", "12 projects / workspace", "20 members / project"],
+    features: [
+      "Risk engine",
+      "Workload optimization suggestions",
+      "Skill gap insights",
+      "Analytics dashboard",
+      "Team admin controls",
+      "Activity log",
+      "Priority support",
     ],
   },
 ];
 
+const PLAN_RANK: Record<PlanTier, number> = { FREE: 0, PRO: 1, TEAM: 2 };
+
+type FeatureRow = {
+  label: string;
+  free: boolean;
+  pro: boolean;
+  team: boolean;
+};
+
+const FEATURE_MATRIX: { group: string; rows: FeatureRow[] }[] = [
+  {
+    group: "Limits",
+    rows: [
+      { label: "Workspaces", free: true, pro: true, team: true },
+      { label: "Projects per workspace", free: true, pro: true, team: true },
+      { label: "Members per project", free: true, pro: true, team: true },
+    ],
+  },
+  {
+    group: "Core",
+    rows: [
+      { label: "Task management", free: true, pro: true, team: true },
+      { label: "Team visibility", free: true, pro: true, team: true },
+      { label: "Basic allocation", free: true, pro: true, team: true },
+    ],
+  },
+  {
+    group: "Collaboration",
+    rows: [
+      { label: "Project chat + threads", free: false, pro: true, team: true },
+      { label: "File uploads in chat", free: false, pro: true, team: true },
+      { label: "Email notifications", free: false, pro: true, team: true },
+    ],
+  },
+  {
+    group: "Allocation",
+    rows: [
+      { label: "Advanced scoring + breakdown", free: false, pro: true, team: true },
+      { label: "Workload visibility", free: false, pro: true, team: true },
+      { label: "Allocation history", free: false, pro: true, team: true },
+      { label: "Workload optimization suggestions", free: false, pro: false, team: true },
+      { label: "Skill gap insights", free: false, pro: false, team: true },
+      { label: "Risk engine", free: false, pro: false, team: true },
+    ],
+  },
+  {
+    group: "Admin & Insights",
+    rows: [
+      { label: "Analytics dashboard", free: false, pro: false, team: true },
+      { label: "Team admin controls", free: false, pro: false, team: true },
+      { label: "Activity log", free: false, pro: false, team: true },
+      { label: "Priority support", free: false, pro: false, team: true },
+    ],
+  },
+];
+
+function CellMark({ on }: { on: boolean }) {
+  return on ? (
+    <Check className="mx-auto h-4 w-4 text-success" aria-label="Included" />
+  ) : (
+    <X className="mx-auto h-4 w-4 text-muted-foreground/50" aria-label="Not included" />
+  );
+}
+
 export default function BillingPage() {
-  const queryClient = useQueryClient();
-
-  // ✅ REPLACED: useGetMe()
-  const { data: me } = useQuery({
-    queryKey: ["me"],
-    queryFn: async () => (await api.get("/auth/me")).data,
-  });
-
-  // ✅ REPLACED: useListBillingHistory()
-  const { data: history } = useQuery({
-    queryKey: ["billing-history"],
-    queryFn: async () => (await api.get("/billing/history")).data,
-  });
-
-  // ✅ REPLACED: useCreateBillingOrder()
-  const createOrder = useMutation({
-    mutationFn: (plan: string) =>
-      api.post("/billing/create-order", { plan }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["me"] });
-    },
-  });
-
-  // ✅ REPLACED: useApplyCoupon()
-  const applyCoupon = useMutation({
-    mutationFn: (code: string) =>
-      api.post("/billing/apply-coupon", { coupon_code: code }),
-  });
-
   const [coupon, setCoupon] = useState("");
-  const [couponResult, setCouponResult] = useState<string | null>(null);
-  const [pendingPlan, setPendingPlan] = useState<string | null>(null);
+  const { data: user, isLoading } = useMe();
+  const qc = useQueryClient();
+  const [pendingTier, setPendingTier] = useState<PlanTier | null>(null);
 
-  const currentPlan = me?.plan_tier ?? "FREE";
+  const currentPlan: PlanTier = user?.plan_tier ?? "FREE";
 
-  const handleUpgrade = async (planId: string) => {
-    setPendingPlan(planId);
+  const handleUpgrade = async (tier: PlanTier) => {
+    if (tier === "FREE") return;
+    setPendingTier(tier);
+    const planKey = tier.toLowerCase();
     try {
-      const res = await createOrder.mutateAsync(planId);
+      // 1) Load Razorpay SDK
+      const ok = await loadRazorpay();
+      if (!ok) {
+        toast.error("Failed to load Razorpay. Please retry.");
+        setPendingTier(null);
+        return;
+      }
 
-      toast({
-        title: `Order created — ${res.data?.order_id ?? ""}`,
-        description: "Complete payment to activate your plan.",
+      // 2) Create order on backend
+      const orderRes = await billingApi.createOrder(planKey, "monthly");
+      const order = orderRes.data;
+      if (!order?.order_id || !order?.key_id) {
+        toast.error("Could not create order");
+        setPendingTier(null);
+        return;
+      }
+
+      // 3) Open Razorpay checkout
+      openRazorpayCheckout({
+        key: order.key_id,
+        amount: order.amount,
+        currency: order.currency,
+        name: "Allocra",
+        description: `Upgrade to ${tier}`,
+        order_id: order.order_id,
+        prefill: { name: user?.name, email: user?.email },
+        theme: { color: "#6366f1" },
+        modal: {
+          ondismiss: () => {
+            setPendingTier(null);
+            toast("Payment cancelled");
+          },
+        },
+        handler: async (response) => {
+          // 4) Verify payment server-side — only then plan updates
+          try {
+            await billingApi.verifyPayment({
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_signature: response.razorpay_signature,
+              plan: planKey,
+            });
+            // 5) Refresh user state
+            await qc.invalidateQueries({ queryKey: ["auth", "me"] });
+            toast.success(`Plan upgraded to ${tier}`);
+          } catch (err) {
+            toast.error(extractError(err) || "Payment verification failed");
+          } finally {
+            setPendingTier(null);
+          }
+        },
       });
-
-    } catch {
-      toast({ title: "Failed to create order", variant: "destructive" });
-    } finally {
-      setPendingPlan(null);
+    } catch (e) {
+      toast.error(extractError(e) || "Failed to start checkout");
+      setPendingTier(null);
     }
   };
 
-  const handleApplyCoupon = async () => {
-    if (!coupon.trim()) return;
-
-    try {
-      const res = await applyCoupon.mutateAsync(coupon);
-
-      const discount = res.data?.discount_percent ?? 0;
-
-      setCouponResult(`${discount}% off applied!`);
-
-      toast({
-        title: "Coupon applied!",
-        description: `${discount}% discount`,
-      });
-
-    } catch {
-      setCouponResult("Invalid coupon code.");
-      toast({ title: "Invalid coupon", variant: "destructive" });
-    }
-  };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Billing</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Manage your plan and billing.
+    <div className="mx-auto max-w-6xl space-y-10 p-6 md:p-10">
+      <header className="text-center">
+        <Badge variant="secondary" className="mb-3">
+          <Sparkles className="mr-1 h-3 w-3" /> Plans & Pricing
+        </Badge>
+        <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
+          Choose the plan that fits your team
+        </h1>
+        <p className="mx-auto mt-2 max-w-xl text-muted-foreground">
+          Switch or cancel anytime. Annual billing saves up to 25%.
         </p>
-      </div>
-
-      <div className="bg-card border border-border rounded-xl p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">Current plan</p>
-            <div className="flex items-center gap-2 mt-1">
-              <p className="text-xl font-bold text-foreground">{currentPlan}</p>
-              <PlanBadge plan={currentPlan} />
-            </div>
+        {isLoading ? (
+          <Skeleton className="mx-auto mt-4 h-6 w-48" />
+        ) : (
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs">
+            <span className="text-muted-foreground">Current plan:</span>
+            <span className="font-semibold">{currentPlan}</span>
           </div>
-          {currentPlan !== "FREE" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-border text-destructive hover:text-destructive hover:border-destructive"
-            >
-              Cancel plan
-            </Button>
-          )}
-        </div>
-      </div>
+        )}
+      </header>
 
-      <div className="grid md:grid-cols-2 gap-5">
-        {PLANS.map(plan => {
-          const isCurrentPlan = currentPlan === plan.id;
-          const isPending = pendingPlan === plan.id;
-          const borderColor =
-            plan.color === "primary"
-              ? "border-primary/40"
-              : "border-secondary/40";
+      {/* Plan cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {PLANS.map((p) => {
+          const isCurrent = currentPlan === p.tier;
+          const isDowngrade = PLAN_RANK[p.tier] < PLAN_RANK[currentPlan];
+          const isFree = p.tier === "FREE";
+          const isPending = pendingTier === p.tier;
+          const anyPending = pendingTier !== null;
+          const disabled =
+            isCurrent || isDowngrade || isFree || anyPending;
 
-          const btnClass =
-            plan.color === "primary"
-              ? ""
-              : "bg-secondary hover:bg-secondary/90";
+          let cta: string;
+          if (isCurrent) cta = "Current Plan";
+          else if (isFree) cta = "Free forever";
+          else if (isDowngrade) cta = "Downgrade unavailable";
+          else cta = `Upgrade to ${p.name}`;
 
           return (
-            <div
-              key={plan.id}
-              className={`bg-card border rounded-xl p-5 ${
-                isCurrentPlan ? borderColor : "border-border"
-              }`}
+            <Card
+              key={p.tier}
+              className={`relative flex flex-col p-6 transition-all ${
+                p.featured
+                  ? "border-primary shadow-[var(--shadow-lg)]"
+                  : "border-border/60"
+              } ${isCurrent ? "ring-2 ring-primary/40" : ""}`}
             >
-              <div className="flex items-center gap-2 mb-1">
-                <plan.icon
-                  className={`w-5 h-5 ${
-                    plan.color === "primary"
-                      ? "text-primary"
-                      : "text-secondary"
-                  }`}
-                />
-                <h3 className="font-bold text-lg">{plan.name}</h3>
+              {p.featured && !isCurrent && (
+                <Badge
+                  className="absolute -top-2.5 right-4"
+                  style={{ background: "var(--gradient-primary)" }}
+                >
+                  Most popular
+                </Badge>
+              )}
+              {isCurrent && (
+                <Badge variant="secondary" className="absolute -top-2.5 left-4">
+                  Current Plan
+                </Badge>
+              )}
+
+              <div className="text-sm text-muted-foreground">{p.tagline}</div>
+              <div className="mt-1 text-2xl font-bold">{p.name}</div>
+
+              <div className="mt-2 flex items-baseline gap-1">
+                <span className="text-4xl font-bold tracking-tight">
+                  {p.priceMonthly}
+                </span>
+                <span className="text-sm text-muted-foreground">/month</span>
+              </div>
+              {p.priceAnnual ? (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  or {p.priceAnnual}
+                </div>
+              ) : (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Free forever
+                </div>
+              )}
+
+              <div className="mt-5 space-y-3 text-sm">
+                <div>
+                  <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Limits
+                  </div>
+                  <ul className="space-y-1.5">
+                    {p.limits.map((l) => (
+                      <li key={l} className="flex items-start gap-2">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                        <span>{l}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {p.tier === "FREE" ? "Included" : `Everything in ${p.tier === "PRO" ? "Free" : "Pro"} +`}
+                  </div>
+                  <ul className="space-y-1.5">
+                    {p.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
 
-              <p
-                className={`text-2xl font-bold mb-4 ${
-                  plan.color === "primary"
-                    ? "text-primary"
-                    : "text-secondary"
-                }`}
-              >
-                {plan.price}
-              </p>
-
-              <ul className="space-y-2 mb-6">
-                {plan.features.map(f => (
-                  <li
-                    key={f}
-                    className="flex items-start gap-2 text-sm text-muted-foreground"
-                  >
-                    <Check className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-
               <Button
-                className={`w-full ${btnClass}`}
-                disabled={isCurrentPlan || isPending}
-                onClick={() => handleUpgrade(plan.id)}
+                className="mt-6"
+                disabled={disabled}
+                variant={p.featured && !isCurrent ? "default" : "outline"}
+                onClick={() => handleUpgrade(p.tier)}
               >
-                {isCurrentPlan
-                  ? "Current plan"
-                  : isPending
-                  ? "Processing..."
-                  : `Upgrade to ${plan.name}`}
+                {isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {cta}
               </Button>
-            </div>
+            </Card>
           );
         })}
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-5">
-        <h2 className="font-semibold mb-3">Apply Coupon</h2>
+      {/* Comparison table */}
+      <Card className="overflow-hidden p-0">
+        <div className="border-b border-border/60 p-6">
+          <h2 className="text-lg font-semibold">Compare plans</h2>
+          <p className="text-sm text-muted-foreground">
+            A detailed look at what's included in each tier.
+          </p>
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[45%]">Feature</TableHead>
+              <TableHead className="text-center">FREE</TableHead>
+              <TableHead className="text-center">PRO</TableHead>
+              <TableHead className="text-center">TEAM</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {FEATURE_MATRIX.map((group) => (
+              <>
+                <TableRow key={`g-${group.group}`} className="bg-muted/30 hover:bg-muted/30">
+                  <TableCell
+                    colSpan={4}
+                    className="py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  >
+                    {group.group}
+                  </TableCell>
+                </TableRow>
+                {group.rows.map((row) => (
+                  <TableRow key={`${group.group}-${row.label}`}>
+                    <TableCell className="font-medium">{row.label}</TableCell>
+                    <TableCell className="text-center">
+                      <CellMark on={row.free} />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <CellMark on={row.pro} />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <CellMark on={row.team} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
 
-        <div className="flex gap-2">
+      <Card className="mx-auto max-w-md p-6">
+        <h3 className="text-base font-semibold">Have a coupon?</h3>
+        <div className="mt-3 flex gap-2">
           <Input
-            placeholder="COUPON CODE"
+            placeholder="Enter coupon code"
             value={coupon}
-            onChange={e => setCoupon(e.target.value.toUpperCase())}
-            className="bg-accent border-border font-mono"
+            onChange={(e) => setCoupon(e.target.value)}
           />
-
           <Button
             variant="outline"
-            className="border-border"
-            onClick={handleApplyCoupon}
-            disabled={!coupon.trim() || applyCoupon.isPending}
+            onClick={() => toast("Coupons not supported yet")}
           >
-            <Tag className="w-4 h-4 mr-1" />
             Apply
           </Button>
         </div>
-
-        {couponResult && (
-          <p
-            className={`text-sm mt-2 ${
-              couponResult.includes("off")
-                ? "text-green-400"
-                : "text-destructive"
-            }`}
-          >
-            {couponResult}
-          </p>
-        )}
-      </div>
-
-      {history && history.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-5">
-          <h2 className="font-semibold mb-4">Billing History</h2>
-
-          <div className="space-y-2">
-            {history.map((event: any) => (
-              <div
-                key={event.id}
-                className="flex items-center justify-between py-2 border-b border-border last:border-0"
-              >
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {event.description ?? event.plan}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {event.created_at
-                      ? new Date(event.created_at).toLocaleDateString()
-                      : ""}
-                  </p>
-                </div>
-
-                <span
-                  className={`text-sm font-semibold ${
-                    event.status === "completed"
-                      ? "text-green-400"
-                      : "text-amber-400"
-                  }`}
-                >
-                  {event.amount
-                    ? `$${event.amount}`
-                    : event.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      </Card>
     </div>
   );
 }

@@ -1,179 +1,184 @@
-import { Link } from "wouter";
-import api from "@/api/client";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useWorkspaces, useCreateWorkspace, useJoinWorkspace } from "@/hooks/useWorkspaces";
 import { useWorkspaceStore } from "@/stores/workspace";
-import { StatCard } from "@/components/shared/StatCard";
-import { PlanBadge } from "@/components/shared/PlanBadge";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
-  FolderKanban, Bell, Zap, ChevronRight
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { CardSkeleton } from "@/components/states/PageSkeleton";
+import { EmptyState, ErrorState } from "@/components/states/StateViews";
+import { IncompleteProfileBanner } from "@/components/projects/IncompleteProfileBanner";
+import { Building2, Plus, Users, ArrowRight } from "lucide-react";
+import toast from "react-hot-toast";
 
-export default function DashboardPage() {
-  const { activeWorkspaceId, setActiveWorkspace } = useWorkspaceStore();
-
-  const { data: me, isLoading: meLoading } = useQuery({
-    queryKey: ["me"],
-    queryFn: async () => (await api.get("/auth/me")).data,
-  });
-
-  const { data: workspacesRaw } = useQuery({
-    queryKey: ["workspaces"],
-    queryFn: async () => (await api.get("/workspaces")).data,
-  });
-
-  const workspaces = Array.isArray(workspacesRaw)
-    ? workspacesRaw
-    : workspacesRaw?.data || [];
-
-  const targetWorkspaceId = activeWorkspaceId ?? workspaces?.[0]?.id ?? "";
-
-  const { data: projectsRaw } = useQuery({
-    queryKey: ["projects", targetWorkspaceId],
-    enabled: !!targetWorkspaceId,
-    queryFn: async () =>
-      (await api.get("/projects", {
-        params: { workspace_id: targetWorkspaceId },
-      })).data,
-  });
-
-  const projects = Array.isArray(projectsRaw)
-    ? projectsRaw
-    : projectsRaw?.data || [];
-
-  const { data: notificationsRaw } = useQuery({
-    queryKey: ["notifications"],
-    queryFn: async () => (await api.get("/notifications")).data,
-  });
-
-  const notifications = Array.isArray(notificationsRaw)
-    ? notificationsRaw
-    : notificationsRaw?.data || [];
-
-  if (meLoading) {
-    return (
-      <div className="flex items-center justify-center h-full min-h-96">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  const unread = notifications.filter((n: any) => !n.is_read).length;
+export default function Dashboard() {
+  const navigate = useNavigate();
+  const { data, isLoading, isError, refetch } = useWorkspaces();
+  const setCurrent = useWorkspaceStore((s) => s.setCurrent);
+  const workspaces = data ?? [];
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            Welcome back{me?.name ? `, ${me.name.split(" ")[0]}` : ""}
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Here's what's happening with your teams.
+          <h1 className="text-3xl font-bold tracking-tight">Workspaces</h1>
+          <p className="mt-1 text-muted-foreground">
+            Pick a workspace to jump back into your team's flow.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <PlanBadge plan={me?.plan_tier ?? "FREE"} />
-          <Link href="/notifications">
-            <Button variant="outline" size="sm" className="relative border-border">
-              <Bell className="w-4 h-4" />
-              {unread > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-white text-xs rounded-full flex items-center justify-center">
-                  {unread}
-                </span>
-              )}
-            </Button>
-          </Link>
+        <div className="flex gap-2">
+          <JoinDialog />
+          <CreateDialog />
         </div>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Workspaces" value={workspaces.length} />
-        <StatCard label="Active Projects" value={projects.length} />
-        <StatCard
-          label="Notifications"
-          value={unread}
-          trend={unread > 0 ? "unread" : "all caught up"}
-        />
-        <StatCard label="Plan" value={me?.plan_tier ?? "FREE"} />
-      </div>
+      <IncompleteProfileBanner />
 
-      {workspaces.length > 0 ? (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h2 className="font-semibold text-foreground mb-4">Workspaces</h2>
-
-            <div className="space-y-3">
-              {workspaces.map((ws: any) => (
-                <Link key={ws.id} href={`/workspaces/${ws.id}`}>
-                  <div
-                    className="flex items-center gap-3 p-3 rounded-lg bg-accent hover:bg-accent/70 cursor-pointer transition-colors"
-                    onClick={() => setActiveWorkspace(ws.id)}
-                  >
-                    <div className="w-9 h-9 rounded-lg bg-primary/20 flex items-center justify-center">
-                      <span className="text-primary font-bold text-sm">
-                        {ws.name[0]}
-                      </span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">{ws.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Code: <span className="font-mono">{ws.join_code}</span>
-                      </p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h2 className="font-semibold text-foreground mb-4">
-              Recent Projects
-            </h2>
-
-            {projects.length > 0 ? (
-              <div className="space-y-3">
-                {projects.slice(0, 5).map((project: any) => (
-                  <Link
-                    key={project.id}
-                    href={`/workspaces/${targetWorkspaceId}/projects/${project.id}`}
-                  >
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-accent hover:bg-accent/70 cursor-pointer">
-                      <FolderKanban className="w-5 h-5 text-primary" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium truncate">
-                          {project.name}
-                        </p>
-                      </div>
-                      <Badge variant="outline">
-                        {project.is_archived ? "archived" : "active"}
-                      </Badge>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                icon={FolderKanban}
-                title="No projects yet"
-                description="Create your first project."
-              />
-            )}
-          </div>
-        </div>
-      ) : (
+      {isLoading && <CardSkeleton count={6} />}
+      {isError && <ErrorState onRetry={() => refetch()} />}
+      {!isLoading && !isError && workspaces.length === 0 && (
         <EmptyState
-          icon={Zap}
-          title="Get started"
-          description="Create or join a workspace."
-          actionLabel="Go to onboarding"
-          onAction={() => (window.location.href = "/onboarding")}
+          icon={<Building2 className="h-6 w-6" />}
+          title="No workspaces yet"
+          message="Create your first workspace or join one with a code."
+          action={
+            <div className="flex gap-2">
+              <JoinDialog />
+              <CreateDialog />
+            </div>
+          }
         />
       )}
+
+      {!isLoading && workspaces.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {workspaces.map((ws) => (
+            <Card
+              key={ws.id}
+              className="group cursor-pointer overflow-hidden border-border/60 p-6 transition-all hover:border-primary/40 hover:shadow-[var(--shadow-md)]"
+              onClick={() => {
+                setCurrent(ws);
+                navigate(`/workspaces/${ws.id}`);
+              }}
+            >
+              <div className="flex items-start justify-between">
+                <div
+                  className="flex h-11 w-11 items-center justify-center rounded-xl text-primary-foreground"
+                  style={{ background: "var(--gradient-primary)" }}
+                >
+                  <Building2 className="h-5 w-5" />
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-1" />
+              </div>
+              <div className="mt-4">
+                <div className="text-lg font-semibold">{ws.name}</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {ws.member_count ?? 0} members
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+function CreateDialog() {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const create = useCreateWorkspace();
+
+  const submit = async () => {
+    if (!name.trim()) return toast.error("Name required");
+    try {
+      await create.mutateAsync({ name: name.trim() });
+      toast.success("Workspace created");
+      setOpen(false);
+      setName("");
+    } catch {
+      toast.error("Could not create");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button>
+          <Plus className="mr-1.5 h-4 w-4" /> New workspace
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create workspace</DialogTitle>
+        </DialogHeader>
+        <Input
+          placeholder="Workspace name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={create.isPending}>
+            {create.isPending ? "Creating..." : "Create"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function JoinDialog() {
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const join = useJoinWorkspace();
+
+  const submit = async () => {
+    if (!code.trim()) return toast.error("Code required");
+    try {
+      await join.mutateAsync({ join_code: code.trim() });
+      toast.success("Joined workspace");
+      setOpen(false);
+      setCode("");
+    } catch {
+      toast.error("Invalid code");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Users className="mr-1.5 h-4 w-4" /> Join
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Join workspace</DialogTitle>
+        </DialogHeader>
+        <Input
+          placeholder="Enter join code"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+        />
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={join.isPending}>
+            {join.isPending ? "Joining..." : "Join"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

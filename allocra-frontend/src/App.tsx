@@ -1,124 +1,221 @@
-import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { SignedIn, SignedOut, useAuth, useUser } from "@clerk/clerk-react";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useEffect } from "react";
-import { setupInterceptors } from "@/api/client";
-import { useUiStore } from "@/stores/ui";
-import SignInPage from "@/pages/SignInPage";
-import SignUpPage from "@/pages/SignUpPage";
-import OnboardingPage from "@/pages/OnboardingPage";
-import DashboardPage from "@/pages/DashboardPage";
-import WorkspacePage from "@/pages/WorkspacePage";
-import ProjectPage from "@/pages/ProjectPage";
-import NotificationsPage from "@/pages/NotificationsPage";
-import SettingsPage from "@/pages/SettingsPage";
-import BillingPage from "@/pages/BillingPage";
-import AppLayout from "@/components/layout/AppLayout";
-import UpgradeModal from "@/components/shared/UpgradeModal";
-import NotFound from "@/pages/not-found";
+import { ClerkProvider } from "@clerk/clerk-react";
+import { Toaster as HotToaster } from "react-hot-toast";
+
+import SignInPage from "./pages/SignInPage";
+import SignUpPage from "./pages/SignUpPage";
+import Onboarding from "./pages/Onboarding";
+import Dashboard from "./pages/Dashboard";
+import WorkspacePage from "./pages/WorkspacePage";
+import ProjectPage from "./pages/ProjectPage";
+import ProjectsListPage from "./pages/ProjectsListPage";
+import NotificationsPage from "./pages/NotificationsPage";
+import SettingsPage from "./pages/SettingsPage";
+import BillingPage from "./pages/BillingPage";
+import NotFound from "./pages/NotFound";
+
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AppShell } from "./components/layout/AppShell";
+import { UpgradeModal } from "./components/UpgradeModal";
+import { useApiAuth } from "./hooks/useApiAuth";
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 30000,
-    },
+    queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 },
   },
 });
 
-function AuthInterceptorSetup() {
-  const { getToken } = useAuth();
-  useEffect(() => {
-    setupInterceptors(() => getToken());
-  }, [getToken]);
-  return null;
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+function MissingClerkKey() {
+  return (
+    <div className="flex min-h-screen items-center justify-center surface-mesh p-6">
+      <div className="max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-[var(--shadow-md)]">
+        <h1 className="text-2xl font-bold gradient-text">Allocra</h1>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Add your <code className="rounded bg-muted px-1.5 py-0.5">VITE_CLERK_PUBLISHABLE_KEY</code>{" "}
+          to <code className="rounded bg-muted px-1.5 py-0.5">.env</code> and restart the
+          dev server to enable authentication.
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Also set <code className="rounded bg-muted px-1.5 py-0.5">VITE_API_URL</code> to your backend URL.
+        </p>
+      </div>
+    </div>
+  );
 }
 
-function RootRedirect() {
-  const { isSignedIn, isLoaded } = useAuth();
-  if (!isLoaded) return null;
-  if (isSignedIn) return <Redirect to="/dashboard" />;
-  return <Redirect to="/sign-in" />;
-}
-
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function Shell({ children }: { children: React.ReactNode }) {
+  useApiAuth();
   return (
     <>
-      <SignedIn>
-        <AppLayout>{children}</AppLayout>
-      </SignedIn>
-      <SignedOut>
-        <Redirect to="/sign-in" />
-      </SignedOut>
+      <UpgradeModal />
+      {children}
     </>
   );
 }
 
-function Router() {
-  const { openUpgradeModal, closeUpgradeModal, upgradeModalOpen, upgradeModalPlan } = useUiStore();
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const ce = e as CustomEvent;
-      openUpgradeModal(ce.detail?.plan ?? "PRO");
-    };
-    window.addEventListener("allocra:plan_required", handler);
-    return () => window.removeEventListener("allocra:plan_required", handler);
-  }, [openUpgradeModal]);
-
+function ClerkWithRouter({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
   return (
-    <>
-      <Switch>
-        <Route path="/" component={RootRedirect} />
-        <Route path="/sign-in">
-          <SignInPage />
-        </Route>
-        <Route path="/sign-in/sso-callback">
-          <SignInPage />
-        </Route>
-        <Route path="/sign-up" component={SignUpPage} />
-        <Route path="/onboarding" component={OnboardingPage} />
-        <Route path="/dashboard">
-          <ProtectedRoute><DashboardPage /></ProtectedRoute>
-        </Route>
-        <Route path="/workspaces/:workspaceId">
-          <ProtectedRoute><WorkspacePage /></ProtectedRoute>
-        </Route>
-        <Route path="/workspaces/:workspaceId/projects/:projectId">
-          <ProtectedRoute><ProjectPage /></ProtectedRoute>
-        </Route>
-        <Route path="/notifications">
-          <ProtectedRoute><NotificationsPage /></ProtectedRoute>
-        </Route>
-        <Route path="/settings">
-          <ProtectedRoute><SettingsPage /></ProtectedRoute>
-        </Route>
-        <Route path="/billing">
-          <ProtectedRoute><BillingPage /></ProtectedRoute>
-        </Route>
-        <Route component={NotFound} />
-      </Switch>
-      <UpgradeModal open={upgradeModalOpen} plan={upgradeModalPlan} onClose={closeUpgradeModal} />
-    </>
+    <ClerkProvider
+      publishableKey={PUBLISHABLE_KEY}
+      routerPush={(to) => navigate(to)}
+      routerReplace={(to) => navigate(to, { replace: true })}
+    >
+      <Shell>{children}</Shell>
+    </ClerkProvider>
   );
 }
 
-function App() {
+const App = () => {
+  if (!PUBLISHABLE_KEY || PUBLISHABLE_KEY === "pk_test_replace_me") {
+    return <MissingClerkKey />;
+  }
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}>
-          <AuthInterceptorSetup />
-          <Router />
-          <Toaster />
-        </WouterRouter>
+        <Toaster />
+        <Sonner />
+        <HotToaster position="top-right" />
+        <BrowserRouter>
+          <ClerkWithRouter>
+            <Routes>
+              {/* Public auth routes */}
+              <Route
+                path="/sign-in/*"
+                element={
+                  <ProtectedRoute requireOnboarding={false} publicOnly>
+                    <SignInPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/sign-up/*"
+                element={
+                  <ProtectedRoute requireOnboarding={false} publicOnly>
+                    <SignUpPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/signin/*" element={<Navigate to="/sign-in" replace />} />
+              <Route path="/signup/*" element={<Navigate to="/sign-up" replace />} />
+
+              {/* Onboarding (auth required, but no onboarding gate) */}
+              <Route
+                path="/onboarding"
+                element={
+                  <ProtectedRoute requireOnboarding={false} redirectOnboardedTo="/dashboard">
+                    <Onboarding />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Authenticated app */}
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <AppShell>
+                      <Dashboard />
+                    </AppShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/workspaces/:id"
+                element={
+                  <ProtectedRoute>
+                    <AppShell>
+                      <WorkspacePage />
+                    </AppShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/workspaces/:workspaceId/projects/:projectId/*"
+                element={
+                  <ProtectedRoute>
+                    <AppShell>
+                      <ProjectPage />
+                    </AppShell>
+                  </ProtectedRoute>
+                }
+              />
+              {/* Legacy flat project URL → projects are now nested under workspaces */}
+              <Route
+                path="/projects"
+                element={
+                  <ProtectedRoute>
+                    <AppShell>
+                      <ProjectsListPage />
+                    </AppShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects/:id"
+                element={
+                  <ProtectedRoute>
+                    <AppShell>
+                      <ProjectPage />
+                    </AppShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/notifications"
+                element={
+                  <ProtectedRoute>
+                    <AppShell>
+                      <NotificationsPage />
+                    </AppShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute>
+                    <AppShell>
+                      <SettingsPage />
+                    </AppShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/billing"
+                element={
+                  <ProtectedRoute>
+                    <AppShell>
+                      <BillingPage />
+                    </AppShell>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Root → dashboard (auth gate handles unauthenticated case) */}
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+              {/* Catch-all */}
+              <Route
+                path="*"
+                element={
+                  <ProtectedRoute requireOnboarding={false}>
+                    <NotFound />
+                  </ProtectedRoute>
+                }
+              />
+            </Routes>
+          </ClerkWithRouter>
+        </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
   );
-}
+};
 
 export default App;
-
-

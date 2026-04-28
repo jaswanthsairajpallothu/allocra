@@ -1,8 +1,8 @@
-"""Initial schema — all tables
+"""Initial schema — all tables + enums (idempotent)
 
 Revision ID: 001_initial
-Revises: 
-Create Date: 2026-04-24
+Revises:
+Create Date: 2026-04-27
 """
 from typing import Sequence, Union
 from alembic import op
@@ -15,8 +15,34 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+# def _create_enum(name: str, *values: str) -> None:
+#     """Create a PostgreSQL enum only if it doesn't already exist."""
+#     vals = ", ".join(f"'{v}'" for v in values)
+#     op.execute(f"DO $$ BEGIN CREATE TYPE {name} AS ENUM ({vals}); EXCEPTION WHEN duplicate_object THEN NULL; END $$;")
+
+
+# def _add_enum_value(type_name: str, value: str) -> None:
+#     """Add a value to an existing enum if not already present."""
+#     op.execute(
+#         f"DO $$ BEGIN ALTER TYPE {type_name} ADD VALUE IF NOT EXISTS '{value}'; "
+#         f"EXCEPTION WHEN others THEN NULL; END $$;"
+#     )
+
+
 def upgrade() -> None:
-    # Users
+    # ── Enums ─────────────────────────────────────────────────────────────
+    # _create_enum("plantier", "FREE", "PRO", "TEAM")
+    # _create_enum("taskpriority", "LOW", "MEDIUM", "HIGH")
+    # _create_enum("taskstatus",
+    #              "PENDING", "ASSIGNED", "IN_PROGRESS",
+    #              "SUBMITTED", "COMPLETED", "REJECTED")
+    # _create_enum("notificationtype",
+    #              "TASK_ASSIGNED", "ALLOCATION_COMPLETE",
+    #              "MEMBER_JOINED", "RISK_ALERT", "PLAN_UPGRADED")
+    # _create_enum("subscriptionstatus", "ACTIVE", "CANCELLED", "FAILED", "EXPIRED")
+    # _create_enum("reviewdecision", "APPROVED", "REJECTED")
+
+    # ── users ──────────────────────────────────────────────────────────────
     op.create_table(
         "users",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -25,7 +51,9 @@ def upgrade() -> None:
         sa.Column("name", sa.String(256), nullable=False),
         sa.Column("display_id", sa.String(12), nullable=False),
         sa.Column("avatar_url", sa.Text, nullable=True),
-        sa.Column("plan_tier", sa.Enum("FREE", "PRO", "TEAM", name="plantier"), nullable=False, server_default="FREE"),
+        sa.Column("plan_tier",
+                  sa.Enum("FREE", "PRO", "TEAM", name="plantier", create_type=False),
+                  nullable=False, server_default="FREE"),
         sa.Column("email_notifications", sa.Boolean, nullable=False, server_default="true"),
         sa.Column("in_app_notifications", sa.Boolean, nullable=False, server_default="true"),
         sa.Column("onboarding_step", sa.Integer, nullable=False, server_default="0"),
@@ -38,7 +66,7 @@ def upgrade() -> None:
     op.create_index("ix_users_clerk_user_id", "users", ["clerk_user_id"], unique=True)
     op.create_index("ix_users_display_id", "users", ["display_id"], unique=True)
 
-    # Workspaces
+    # ── workspaces ─────────────────────────────────────────────────────────
     op.create_table(
         "workspaces",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -52,7 +80,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_workspaces_join_code", "workspaces", ["join_code"], unique=True)
 
-    # Workspace Members
+    # ── workspace_members ──────────────────────────────────────────────────
     op.create_table(
         "workspace_members",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -67,7 +95,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("workspace_id", "user_id", name="uq_workspace_user"),
     )
 
-    # Projects
+    # ── projects ───────────────────────────────────────────────────────────
     op.create_table(
         "projects",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -81,7 +109,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    # Project Members (skills are PER-PROJECT, not global)
+    # ── project_members ────────────────────────────────────────────────────
     op.create_table(
         "project_members",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -97,7 +125,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("project_id", "user_id", name="uq_project_user"),
     )
 
-    # Tasks
+    # ── tasks ──────────────────────────────────────────────────────────────
     op.create_table(
         "tasks",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -107,8 +135,13 @@ def upgrade() -> None:
         sa.Column("required_skill", sa.String(128), nullable=False),
         sa.Column("required_level", sa.Integer, nullable=False),
         sa.Column("estimated_hours", sa.Float, nullable=False),
-        sa.Column("priority", sa.Enum("LOW", "MEDIUM", "HIGH", name="taskpriority"), nullable=False, server_default="MEDIUM"),
-        sa.Column("status", sa.Enum("PENDING", "ASSIGNED", "COMPLETED", name="taskstatus"), nullable=False, server_default="PENDING"),
+        sa.Column("priority",
+                  sa.Enum("LOW", "MEDIUM", "HIGH", name="taskpriority", create_type=False),
+                  nullable=False, server_default="MEDIUM"),
+        sa.Column("status",
+                  sa.Enum("PENDING", "ASSIGNED", "IN_PROGRESS", "SUBMITTED",
+                          "COMPLETED", "REJECTED", name="taskstatus", create_type=False),
+                  nullable=False, server_default="PENDING"),
         sa.Column("assigned_to", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -117,7 +150,41 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    # Allocation Runs
+    # ── task_submissions ───────────────────────────────────────────────────
+    op.create_table(
+        "task_submissions",
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("task_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("submitted_by", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("description", sa.Text, nullable=True),
+        sa.Column("links", postgresql.JSON, nullable=False, server_default="[]"),
+        sa.Column("files", postgresql.JSON, nullable=False, server_default="[]"),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["task_id"], ["tasks.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["submitted_by"], ["users.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_task_submissions_task_id", "task_submissions", ["task_id"])
+
+    # ── task_reviews ───────────────────────────────────────────────────────
+    op.create_table(
+        "task_reviews",
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("submission_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("reviewed_by", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("decision",
+                  sa.Enum("APPROVED", "REJECTED", name="reviewdecision", create_type=False),
+                  nullable=False),
+        sa.Column("rating", sa.Integer, nullable=True),
+        sa.Column("feedback", sa.Text, nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["submission_id"], ["task_submissions.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["reviewed_by"], ["users.id"], ondelete="SET NULL"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("submission_id", name="uq_review_submission"),
+    )
+
+    # ── allocation_runs ────────────────────────────────────────────────────
     op.create_table(
         "allocation_runs",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -134,12 +201,16 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    # Notifications
+    # ── notifications ──────────────────────────────────────────────────────
     op.create_table(
         "notifications",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("type", sa.Enum("TASK_ASSIGNED", "ALLOCATION_COMPLETE", "MEMBER_JOINED", "RISK_ALERT", "PLAN_UPGRADED", name="notificationtype"), nullable=False),
+        sa.Column("type",
+                  sa.Enum("TASK_ASSIGNED", "ALLOCATION_COMPLETE", "MEMBER_JOINED",
+                          "RISK_ALERT", "PLAN_UPGRADED",
+                          name="notificationtype", create_type=False),
+                  nullable=False),
         sa.Column("title", sa.String(256), nullable=False),
         sa.Column("body", sa.Text, nullable=False),
         sa.Column("action_url", sa.String(512), nullable=True),
@@ -149,7 +220,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    # Chat Messages
+    # ── chat_messages ──────────────────────────────────────────────────────
     op.create_table(
         "chat_messages",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -167,13 +238,18 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    # Subscriptions
+    # ── subscriptions ──────────────────────────────────────────────────────
     op.create_table(
         "subscriptions",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("plan", sa.Enum("FREE", "PRO", "TEAM", name="plantier"), nullable=False),
-        sa.Column("status", sa.Enum("ACTIVE", "CANCELLED", "FAILED", "EXPIRED", name="subscriptionstatus"), nullable=False, server_default="ACTIVE"),
+        sa.Column("plan",
+                  sa.Enum("FREE", "PRO", "TEAM", name="plantier", create_type=False),
+                  nullable=False),
+        sa.Column("status",
+                  sa.Enum("ACTIVE", "CANCELLED", "FAILED", "EXPIRED",
+                          name="subscriptionstatus", create_type=False),
+                  nullable=False, server_default="ACTIVE"),
         sa.Column("razorpay_subscription_id", sa.String(128), nullable=True),
         sa.Column("start_date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("end_date", sa.DateTime(timezone=True), nullable=True),
@@ -182,7 +258,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    # Billing Events
+    # ── billing_events ─────────────────────────────────────────────────────
     op.create_table(
         "billing_events",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -192,13 +268,15 @@ def upgrade() -> None:
         sa.Column("status", sa.String(32), nullable=False),
         sa.Column("razorpay_payment_id", sa.String(128), nullable=True),
         sa.Column("razorpay_order_id", sa.String(128), nullable=True),
-        sa.Column("plan", sa.Enum("FREE", "PRO", "TEAM", name="plantier"), nullable=False),
+        sa.Column("plan",
+                  sa.Enum("FREE", "PRO", "TEAM", name="plantier", create_type=False),
+                  nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
 
-    # Activity Logs
+    # ── activity_logs ──────────────────────────────────────────────────────
     op.create_table(
         "activity_logs",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -214,20 +292,19 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table("activity_logs")
-    op.drop_table("billing_events")
-    op.drop_table("subscriptions")
-    op.drop_table("chat_messages")
-    op.drop_table("notifications")
-    op.drop_table("allocation_runs")
-    op.drop_table("tasks")
-    op.drop_table("project_members")
-    op.drop_table("projects")
-    op.drop_table("workspace_members")
-    op.drop_table("workspaces")
-    op.drop_table("users")
-    op.execute("DROP TYPE IF EXISTS plantier")
-    op.execute("DROP TYPE IF EXISTS taskpriority")
-    op.execute("DROP TYPE IF EXISTS taskstatus")
-    op.execute("DROP TYPE IF EXISTS notificationtype")
-    op.execute("DROP TYPE IF EXISTS subscriptionstatus")
+    tables = [
+        "activity_logs", "billing_events", "subscriptions",
+        "chat_messages", "notifications", "allocation_runs",
+        "task_reviews", "task_submissions", "tasks",
+        "project_members", "projects",
+        "workspace_members", "workspaces", "users",
+    ]
+    for t in tables:
+        op.execute(f"DROP TABLE IF EXISTS {t} CASCADE")
+
+    enums = [
+        "plantier", "taskpriority", "taskstatus",
+        "notificationtype", "subscriptionstatus", "reviewdecision",
+    ]
+    for e in enums:
+        op.execute(f"DROP TYPE IF EXISTS {e} CASCADE")

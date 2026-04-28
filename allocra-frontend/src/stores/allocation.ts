@@ -1,24 +1,33 @@
 import { create } from "zustand";
+import type { AllocationResult } from "@/types";
 
 interface AllocationState {
-  isAllocating: boolean;
-  lastRunAt: string | null;
+  // Latest run output
+  latestResult: AllocationResult | null;
+  setResult: (r: AllocationResult) => void;
+  clearResult: () => void;
 
-  startAllocation: () => void;
-  finishAllocation: () => void;
-  setLastRunAt: (time: string) => void;
+  // Selection state used by various UIs
+  selectedTaskId: string | null;
+  selectedAssigneeId: string | null;
+  setSelectedTask: (id: string | null) => void;
+  setSelectedAssignee: (id: string | null) => void;
+  reset: () => void;
 }
 
 export const useAllocationStore = create<AllocationState>((set) => ({
-  isAllocating: false,
-  lastRunAt: null,
+  latestResult: null,
+  setResult: (r) => set({ latestResult: r }),
+  clearResult: () => set({ latestResult: null }),
 
-  startAllocation: () =>
-    set({ isAllocating: true }),
-
-  finishAllocation: () =>
-    set({ isAllocating: false }),
-
-  setLastRunAt: (time) =>
-    set({ lastRunAt: time }),
+  selectedTaskId: null,
+  selectedAssigneeId: null,
+  setSelectedTask: (id) => set({ selectedTaskId: id }),
+  setSelectedAssignee: (id) => set({ selectedAssigneeId: id }),
+  reset: () =>
+    set({
+      latestResult: null,
+      selectedTaskId: null,
+      selectedAssigneeId: null,
+    }),
 }));

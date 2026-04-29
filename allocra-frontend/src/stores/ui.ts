@@ -1,26 +1,16 @@
 import { create } from "zustand";
+import type { PlanRequiredError } from "@/types/api";
 
-interface UiState {
-  upgradeModalOpen: boolean;
-  upgradeModalPlan: string | null;
-
-  openUpgradeModal: (plan: string) => void;
-  closeUpgradeModal: () => void;
+interface UIState {
+  upgradeOpen: boolean;
+  upgradeContext: PlanRequiredError | null;
+  openUpgrade: (ctx?: PlanRequiredError | null) => void;
+  closeUpgrade: () => void;
 }
 
-export const useUiStore = create<UiState>((set) => ({
-  upgradeModalOpen: false,
-  upgradeModalPlan: null,
-
-  openUpgradeModal: (plan) =>
-    set({
-      upgradeModalOpen: true,
-      upgradeModalPlan: plan,
-    }),
-
-  closeUpgradeModal: () =>
-    set({
-      upgradeModalOpen: false,
-      upgradeModalPlan: null,
-    }),
+export const useUIStore = create<UIState>((set) => ({
+  upgradeOpen: false,
+  upgradeContext: null,
+  openUpgrade: (ctx = null) => set({ upgradeOpen: true, upgradeContext: ctx }),
+  closeUpgrade: () => set({ upgradeOpen: false, upgradeContext: null }),
 }));

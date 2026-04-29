@@ -1,156 +1,137 @@
-import { useState } from "react";
-import { Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import api from "@/api/client";
-
-import { useWorkspaceStore } from "@/stores/workspace";
-import { PlanBadge } from "@/components/shared/PlanBadge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
-
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, Bell, Settings, CreditCard,
-  Zap, Menu, X
+  LayoutDashboard,
+  FolderKanban,
+  Bell,
+  Settings,
+  CreditCard,
+  Sparkles,
+  Building2,
 } from "lucide-react";
+import { UserButton } from "@clerk/clerk-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useUnreadCount } from "@/hooks/useNotifications";
+import { useWorkspaceStore } from "@/stores/workspace";
+import { ReactNode, useState } from "react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Menu } from "lucide-react";
 
-interface AppLayoutProps {
-  children: React.ReactNode;
-}
+const nav = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/projects", label: "Projects", icon: FolderKanban },
+  { to: "/notifications", label: "Notifications", icon: Bell },
+  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/billing", label: "Billing", icon: CreditCard },
+];
 
-export default function AppLayout({ children }: AppLayoutProps) {
-  const [location] = useLocation();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const { activeWorkspaceId, setActiveWorkspace } = useWorkspaceStore();
-
-  // ✅ API CALLS
-  const { data: me } = useQuery({
-    queryKey: ["me"],
-    queryFn: async () => (await api.get("/auth/me")).data,
-  });
-
-  const { data: workspaces } = useQuery({
-    queryKey: ["workspaces"],
-    queryFn: async () => (await api.get("/workspaces")).data,
-  });
-
-  const { data: projects } = useQuery({
-    queryKey: ["projects", activeWorkspaceId],
-    enabled: !!activeWorkspaceId,
-    queryFn: async () =>
-      (await api.get("/projects", { params: { workspace_id: activeWorkspaceId } })).data,
-  });
-
-  const { data: unread } = useQuery({
-    queryKey: ["notifications-unread"],
-    queryFn: async () => (await api.get("/notifications/unread-count")).data,
-  });
-
-  // ✅ NORMALIZED DATA (CRITICAL FIX)
-  const workspaceList = Array.isArray(workspaces)
-    ? workspaces
-    : workspaces?.data || workspaces?.workspaces || [];
-
-  const projectList = Array.isArray(projects)
-    ? projects
-    : projects?.data || projects?.projects || [];
-
-  const unreadCount = unread?.count ?? 0;
-
-  const navItems = [
-    { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { href: "/notifications", icon: Bell, label: "Notifications", badge: unreadCount || undefined },
-    { href: "/billing", icon: CreditCard, label: "Billing" },
-    { href: "/settings", icon: Settings, label: "Settings" },
-  ];
-
-  const Sidebar = () => (
-    <aside className="w-60 min-h-screen bg-sidebar border-r flex flex-col">
-      <div className="p-4 border-b">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center">
-            <Zap className="w-4 h-4 text-white" />
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+  const { data: unread } = useUnreadCount();
+  const current = useWorkspaceStore((s) => s.current);
+  return (
+    <div className="flex h-full flex-col gap-2 p-4">
+      <div className="mb-4 flex items-center gap-2 px-2">
+        <div
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-primary-foreground"
+          style={{ background: "var(--gradient-primary)" }}
+        >
+          <Sparkles className="h-5 w-5" />
+        </div>
+        <div>
+          <div className="text-base font-bold tracking-tight">Allocra</div>
+          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            AI workload
           </div>
-          <span className="font-bold">Allocra</span>
         </div>
       </div>
 
-      <div className="p-3 border-b">
-        <Select value={activeWorkspaceId ?? ""} onValueChange={setActiveWorkspace}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select workspace" />
-          </SelectTrigger>
-          <SelectContent>
-            {workspaceList.map((ws: any) => (
-              <SelectItem key={ws.id} value={ws.id}>
-                {ws.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {current && (
+        <div className="mb-2 rounded-xl border border-border bg-card px-3 py-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Building2 className="h-3.5 w-3.5" /> Workspace
+          </div>
+          <div className="truncate text-sm font-semibold">{current.name}</div>
+        </div>
+      )}
 
-      <nav className="flex-1 p-3 overflow-y-auto">
-        {projectList.map((project: any) => (
-          <Link key={project.id} href={`/workspaces/${activeWorkspaceId}/projects/${project.id}`}>
-            <div
-              className={cn(
-                "px-2 py-1.5 rounded-lg text-sm cursor-pointer",
-                location.includes(project.id)
-                  ? "bg-accent"
-                  : "text-muted-foreground"
-              )}
-            >
-              {project.name}
-            </div>
-          </Link>
+      <nav className="flex flex-col gap-1">
+        {nav.map(({ to, label, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              `flex items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-colors ${
+                isActive
+                  ? "bg-accent text-accent-foreground font-medium"
+                  : "text-foreground/70 hover:bg-muted"
+              }`
+            }
+          >
+            <span className="flex items-center gap-3">
+              <Icon className="h-4 w-4" />
+              {label}
+            </span>
+            {to === "/notifications" && (unread ?? 0) > 0 ? (
+              <Badge className="h-5 min-w-5 rounded-full px-1.5 text-[10px]">
+                {(unread ?? 0) > 99 ? "99+" : unread}
+              </Badge>
+            ) : null}
+          </NavLink>
         ))}
       </nav>
 
-      <div className="p-3 border-t">
-        {navItems.map((item) => (
-          <Link key={item.href} href={item.href}>
-            <div className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer">
-              <item.icon className="w-4 h-4" />
-              <span>{item.label}</span>
-              {item.badge && (
-                <span className="ml-auto text-xs bg-primary text-white px-1.5 rounded">
-                  {item.badge}
-                </span>
-              )}
-            </div>
-          </Link>
-        ))}
-
-        <div className="flex items-center gap-2 mt-3">
-          <Avatar>
-            <AvatarImage src={me?.avatar_url} />
-            <AvatarFallback>{me?.name?.[0]}</AvatarFallback>
-          </Avatar>
-          <div>
-            <p className="text-sm">{me?.name}</p>
-            <PlanBadge plan={me?.plan_tier ?? "FREE"} />
-          </div>
-        </div>
+      <div className="mt-auto flex items-center justify-between rounded-xl border border-border bg-card p-3">
+        <UserButton afterSignOutUrl="/sign-in" />
+        <Button size="sm" variant="ghost" asChild>
+          <NavLink to="/billing">Upgrade</NavLink>
+        </Button>
       </div>
-    </aside>
+    </div>
   );
+}
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   return (
-    <div className="flex min-h-screen">
-      <div className="hidden md:flex">
-        <Sidebar />
-      </div>
+    <div className="flex min-h-screen w-full bg-background surface-mesh">
+      {/* desktop sidebar */}
+      <aside className="hidden w-64 shrink-0 border-r border-border bg-sidebar md:block">
+        <SidebarContent />
+      </aside>
 
-      <div className="flex-1 flex flex-col">
-        <div className="md:hidden p-3 border-b flex items-center gap-2">
-          <Button onClick={() => setMobileOpen(!mobileOpen)}>
-            {mobileOpen ? <X /> : <Menu />}
-          </Button>
-        </div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="md:hidden">
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-72 p-0">
+              <SidebarContent onNavigate={() => setMobileOpen(false)} />
+            </SheetContent>
+          </Sheet>
+          <div className="text-sm text-muted-foreground">
+            {location.pathname}
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/notifications")}
+            >
+              <Bell className="h-4 w-4" />
+            </Button>
+          </div>
+        </header>
 
-        <main className="flex-1">{children}</main>
+        <main key={location.pathname} className="flex-1 animate-fade-in">
+          {children}
+        </main>
       </div>
     </div>
   );

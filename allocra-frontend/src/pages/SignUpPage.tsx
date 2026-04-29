@@ -1,10 +1,9 @@
-import { SignIn, useAuth } from "@clerk/clerk-react";
+import { SignUp, useAuth } from "@clerk/clerk-react";
 import { Navigate } from "react-router-dom";
 
-export default function SignInPage() {
+export default function SignUpPage() {
   const { isLoaded, isSignedIn } = useAuth();
 
-  // 🚨 CRITICAL
   if (!isLoaded) return null;
 
   if (isSignedIn) {
@@ -13,7 +12,7 @@ export default function SignInPage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen">
-      <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" />
+      <SignUp routing="path" path="/sign-up" signInUrl="/sign-in" />
     </div>
   );
 }

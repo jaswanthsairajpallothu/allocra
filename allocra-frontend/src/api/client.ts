@@ -1,19 +1,31 @@
-import axios from 'axios';
+import axios, { AxiosInstance } from "axios";
 
-const api = axios.create({ baseURL: '/api' });
+const api: AxiosInstance = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
+  timeout: 15000,
+});
 
-export function setupInterceptors(getToken: () => Promise<string | null>) {
+export type GetTokenFn = () => Promise<string | null>;
+
+export function setupInterceptors(getToken: GetTokenFn) {
   api.interceptors.request.use(async (config) => {
-    const token = await getToken();
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    try {
+      const token = await getToken();
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+    } catch {
+      // getToken failed — request continues unauthenticated
+    }
     return config;
   });
+
   api.interceptors.response.use(
-    (r) => r,
+    (res) => res,
     (error) => {
-      const msg = error.response?.data?.detail;
-      if (typeof msg === 'object' && msg?.error === 'plan_required') {
-        window.dispatchEvent(new CustomEvent('allocra:plan_required', { detail: msg }));
+      const detail = error?.response?.data?.detail;
+      if (typeof detail === "object" && detail?.error === "plan_required") {
+        window.dispatchEvent(
+          new CustomEvent("allocra:plan_required", { detail })
+        );
       }
       return Promise.reject(error);
     }

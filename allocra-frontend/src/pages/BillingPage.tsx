@@ -38,7 +38,7 @@ const PLANS: Plan[] = [
     tier: "FREE",
     priceMonthly: "₹0",
     tagline: "Get started",
-    limits: ["1 workspace", "3 projects / workspace", "10 members / project"],
+    limits: ["1 workspace", "3 projects per each workspace", "10 members per each project"],
     features: ["Basic allocation", "Task management", "Team visibility"],
   },
   {
@@ -47,7 +47,7 @@ const PLANS: Plan[] = [
     priceMonthly: "₹199",
     priceAnnual: "₹1,799 / year",
     tagline: "For growing teams",
-    limits: ["3 workspaces", "6 projects / workspace", "20 members / project"],
+    limits: ["3 workspaces", "6 projects per each workspace", "20 members per each project"],
     features: [
       "Advanced scoring + breakdown",
       "Workload visibility",
@@ -64,7 +64,7 @@ const PLANS: Plan[] = [
     priceMonthly: "₹499",
     priceAnnual: "₹3,799 / year",
     tagline: "Scale together",
-    limits: ["10 workspaces", "12 projects / workspace", "20 members / project"],
+    limits: ["10 workspaces", "12 projects per each workspace", "20 members per each project"],
     features: [
       "Risk engine",
       "Workload optimization suggestions",

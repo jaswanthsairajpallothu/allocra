@@ -1,26 +1,29 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getWorkspace, getWorkspaces, joinWorkspace } from "@/api/services/workspace.service";
+// Mandatory safety utilities — never call .map()/.filter() directly on API data.
 
-export const useWorkspaces = () =>
-  useQuery({
-    queryKey: ["workspaces"],
-    queryFn: getWorkspaces,
-  });
+export const safeArray = <T,>(data: unknown): T[] =>
+  Array.isArray(data) ? (data as T[]) : [];
 
-export const useWorkspace = (id: string) =>
-  useQuery({
-    queryKey: ["workspace", id],
-    queryFn: () => getWorkspace(id),
-    enabled: !!id,
-  });
+export const safeCount = (data: unknown): number => {
+  if (typeof data === "number") return data;
+  if (data && typeof (data as { count?: unknown }).count === "number") {
+    return (data as { count: number }).count;
+  }
+  return 0;
+};
 
-export const useJoinWorkspace = () => {
-  const qc = useQueryClient();
-
-  return useMutation({
-    mutationFn: joinWorkspace,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["workspaces"] });
-    },
-  });
+export const extractError = (error: unknown): string => {
+  const e = error as {
+    response?: { data?: { detail?: unknown } };
+    message?: string;
+  };
+  const detail = e?.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (
+    detail &&
+    typeof detail === "object" &&
+    typeof (detail as { message?: string }).message === "string"
+  ) {
+    return (detail as { message: string }).message;
+  }
+  return e?.message || "Something went wrong";
 };

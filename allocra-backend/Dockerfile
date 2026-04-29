@@ -18,33 +18,53 @@
 #     uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --loop uvloop
 
 
-# Use a stable Python version
-FROM python:3.11-slim
+# # Use a stable Python version
+# FROM python:3.11-slim
 
-# Prevent Python from writing .pyc files and enable unbuffered logging
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+# # Prevent Python from writing .pyc files and enable unbuffered logging
+# ENV PYTHONDONTWRITEBYTECODE 1
+# ENV PYTHONUNBUFFERED 1
 
-# Install system dependencies needed to compile asyncpg and other drivers
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+# # Install system dependencies needed to compile asyncpg and other drivers
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     build-essential \
+#     libpq-dev \
+#     && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory
+# # Set the working directory
+# WORKDIR /app
+
+# # Install Python dependencies
+# COPY requirements.txt .
+# RUN pip install --no-cache-dir --upgrade pip && \
+#     pip install --no-cache-dir -r requirements.txt
+
+# # Copy the rest of your backend code
+# COPY . .
+
+# # Inform Google Cloud that the app listens on port 8080
+# ENV PORT 8080
+# EXPOSE 8080
+
+# # Start the application using uvicorn
+# CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+
+# cat <<EOF > Dockerfile
+FROM python:3.11
+
 WORKDIR /app
 
-# Install Python dependencies
+# Install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
+RUN pip install --no-cache-dir --upgrade pip && \\
     pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of your backend code
+# Copy everything else
 COPY . .
 
-# Inform Google Cloud that the app listens on port 8080
 ENV PORT 8080
 EXPOSE 8080
 
-# Start the application using uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+# The Key Change: We point to app.main instead of just main
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+EOF

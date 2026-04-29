@@ -42,16 +42,16 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(auth.router)
-app.include_router(workspaces.router)
-app.include_router(projects.router)
-app.include_router(tasks.router)
-app.include_router(submissions.router)
-app.include_router(allocate.router)
-app.include_router(notifications.router)
-app.include_router(chat.router)
-app.include_router(billing.router)
-app.include_router(analytics.router)
+app.include_router(auth.router, prefix="/api")
+app.include_router(workspaces.router, prefix="/api")
+app.include_router(projects.router, prefix="/api")
+app.include_router(tasks.router, prefix="/api")
+app.include_router(submissions.router, prefix="/api")
+app.include_router(allocate.router, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
+app.include_router(chat.router, prefix="/api")
+app.include_router(billing.router, prefix="/api")
+app.include_router(analytics.router, prefix="/api")
 
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/health", tags=["health"])

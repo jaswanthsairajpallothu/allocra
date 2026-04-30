@@ -32,7 +32,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex h-full flex-col gap-2 p-4">
       <div className="mb-4 flex items-center gap-2 px-2">
         <img
-          src="/logo.png"
+          src="/assets/allocra_web_logo.jpeg"
           alt="Allocra"
           className="h-9 w-9 rounded-xl object-contain"
         />

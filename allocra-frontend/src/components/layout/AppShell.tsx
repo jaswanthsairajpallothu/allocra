@@ -31,12 +31,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col gap-2 p-4">
       <div className="mb-4 flex items-center gap-2 px-2">
-        <div
-          className="flex h-9 w-9 items-center justify-center rounded-xl text-primary-foreground"
-          style={{ background: "var(--gradient-primary)" }}
-        >
-          <Sparkles className="h-5 w-5" />
-        </div>
+        <img
+          src="/logo.png"
+          alt="Allocra"
+          className="h-9 w-9 rounded-xl object-contain"
+        />
         <div>
           <div className="text-base font-bold tracking-tight">Allocra</div>
           <div className="text-[10px] uppercase tracking-widest text-muted-foreground">

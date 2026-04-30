@@ -11,8 +11,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: npm install && npm run build
+
+      # This step bridges your desired architecture with Vite's requirements
+      - name: Sync Global Assets to Frontend
+        run: |
+          mkdir -p allocra-frontend/public
+          cp -r assets allocra-frontend/public/
+        
+      - name: Install and Build
+        run: npm install && npm run build
         working-directory: allocra-frontend
+
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}

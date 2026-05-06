@@ -12,7 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # This step bridges your desired architecture with Vite's requirements
       - name: Sync Global Assets to Frontend
         run: |
           mkdir -p allocra-frontend/public
@@ -21,6 +20,9 @@ jobs:
       - name: Install and Build
         run: npm install && npm run build
         working-directory: allocra-frontend
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:

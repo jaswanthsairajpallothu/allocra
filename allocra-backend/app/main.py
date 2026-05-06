@@ -42,16 +42,30 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(auth.router, prefix="/api")
-app.include_router(workspaces.router, prefix="/api")
-app.include_router(projects.router, prefix="/api")
-app.include_router(tasks.router, prefix="/api")
-app.include_router(submissions.router, prefix="/api")
-app.include_router(allocate.router, prefix="/api")
-app.include_router(notifications.router, prefix="/api")
-app.include_router(chat.router, prefix="/api")
-app.include_router(billing.router, prefix="/api")
-app.include_router(analytics.router, prefix="/api")
+# app.include_router(auth.router, prefix="/api")
+# app.include_router(workspaces.router, prefix="/api")
+# app.include_router(projects.router, prefix="/api")
+# app.include_router(tasks.router, prefix="/api")
+# app.include_router(submissions.router, prefix="/api")
+# app.include_router(allocate.router, prefix="/api")
+# app.include_router(notifications.router, prefix="/api")
+# app.include_router(chat.router, prefix="/api")
+# app.include_router(billing.router, prefix="/api")
+# app.include_router(analytics.router, prefix="/api")
+
+# ── Routers ───────────────────────────────────────────────────────────────────
+# Each router gets its own clear category under the /api path
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(workspaces.router, prefix="/api/workspaces", tags=["Workspaces"])
+app.include_router(projects.router, prefix="/api/projects", tags=["Projects"])
+app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
+app.include_router(submissions.router, prefix="/api/submissions", tags=["Submissions"])
+app.include_router(allocate.router, prefix="/api/allocate", tags=["Allocation"])
+app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(billing.router, prefix="/api/billing", tags=["Billing"])
+app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
+
 
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/health", tags=["health"])
